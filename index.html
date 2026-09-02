@@ -761,18 +761,39 @@ micBtn.onclick = ()=>{
   profile.key ? startGroq() : startWebSpeech();
 };
 
+/* Safari на iOS не підтримує WebM і пише в MP4. Формат Groq визначає
+   за розширенням файлу, тому беремо перший підтримуваний і даємо йому
+   відповідне імʼя, інакше запит відхиляється з 400. */
+function pickAudioType(){
+  const candidates = [
+    ['audio/webm;codecs=opus','webm'], ['audio/webm','webm'],
+    ['audio/mp4;codecs=mp4a.40.2','m4a'], ['audio/mp4','m4a'],
+    ['audio/aac','m4a'], ['audio/ogg;codecs=opus','ogg'], ['audio/mpeg','mp3']
+  ];
+  for(const [mime, ext] of candidates){
+    if(window.MediaRecorder && MediaRecorder.isTypeSupported && MediaRecorder.isTypeSupported(mime)){
+      return { mime, ext };
+    }
+  }
+  return { mime:'', ext:'m4a' };
+}
+
 async function startGroq(){
   try{
     const stream = await navigator.mediaDevices.getUserMedia({ audio:true });
     chunks = [];
-    recorder = new MediaRecorder(stream);
+    const fmt = pickAudioType();
+    recorder = new MediaRecorder(stream, fmt.mime ? { mimeType: fmt.mime } : undefined);
+    recorder._ext = fmt.ext;
     recorder.ondataavailable = e=>chunks.push(e.data);
     recorder.onstop = async ()=>{
       stream.getTracks().forEach(t=>t.stop());
       micBtn.classList.remove('rec');
-      const blob = new Blob(chunks, { type: recorder.mimeType || 'audio/webm' });
+      const blob = new Blob(chunks, { type: recorder.mimeType || 'audio/mp4' });
+      const ext = recorder._ext || 'm4a';
       recorder = null;
-      await processAudio(blob);
+      if(blob.size < 1200){ toast('Запис порожній — потримайте кнопку довше'); return; }
+      await processAudio(blob, ext);
     };
     recorder.start();
     micBtn.classList.add('rec');
@@ -780,11 +801,11 @@ async function startGroq(){
   }catch(e){ toast('Немає доступу до мікрофона'); }
 }
 
-async function processAudio(blob){
+async function processAudio(blob, ext='m4a'){
   toast('Розпізнаю…');
   try{
     const fd = new FormData();
-    fd.append('file', blob, 'audio.webm');
+    fd.append('file', blob, 'audio.' + ext);
     fd.append('model', 'whisper-large-v3');
     fd.append('language', 'uk');
     fd.append('response_format', 'json');
@@ -807,6 +828,7 @@ function groqError(e){
   if(m.startsWith('401')) return 'Groq: ключ недійсний або відкликаний';
   if(m.startsWith('429')) return 'Groq: перевищено ліміт запитів';
   if(/decommissioned|does not exist|model_not_found/i.test(m)) return 'Groq: модель більше не доступна';
+  if(/empty|could not process|invalid file/i.test(m)) return 'Groq не прийняв аудіо — спробуйте записати ще раз';
   if(m.startsWith('400')) return 'Groq відхилив запит: ' + m.slice(0,70);
   return 'Groq: ' + m.slice(0,70);
 }
