@@ -389,6 +389,7 @@ input,select,textarea{font:inherit;color:inherit}
 
   <button class="ghost" id="enablePushBtn">Увімкнути фонові нагадування</button>
   <button class="ghost" id="testNotif">Надіслати тестове сповіщення</button>
+  <button class="ghost" id="resetMic">Скинути спосіб запису голосу</button>
   <div class="field" style="margin-top:14px">
     <label>Діагностика сповіщень</label>
     <div id="diag" class="note" style="background:var(--field);border:1.5px solid var(--line);border-radius:14px;padding:13px 15px"></div>
@@ -662,6 +663,10 @@ document.getElementById('clearDone').onclick = ()=>{
 };
 
 /* settings */
+document.getElementById('resetMic').onclick = ()=>{
+  micMode = 'mr'; store.set('planner.micmode','mr'); resetMic();
+  toast('Скинуто — застосунок знову спробує звичайний запис');
+};
 document.getElementById('testNotif').onclick = ()=>{
   notify({ id:'test', title:'Тестове нагадування', time:'', category:'work', note:'Якщо ви це бачите — доставка працює' });
 };
@@ -760,7 +765,19 @@ let recognizer = null, recStarted = 0, recording = false;
    2) Web Audio → WAV — запасний, вмикається сам, якщо перший віддав
       порожній файл (так поводиться Safari на частині iOS).
    Обраний спосіб памʼятаємо, щоб не наступати на ті самі граблі. */
-let useWav = store.get('planner.wav', false);
+let micMode = store.get('planner.micmode', 'mr');   // 'mr' | 'wav' | 'speech'
+let watchdog = null;
+
+function resetMic(){                                // єдина точка скидання стану
+  clearTimeout(watchdog);
+  recording = false;
+  micBtn.classList.remove('rec');
+}
+function switchMode(next, why){
+  micMode = next; store.set('planner.micmode', next);
+  resetMic();
+  toast(why);
+}
 
 micBtn.onclick = ()=>{
   if(recording){
@@ -771,7 +788,9 @@ micBtn.onclick = ()=>{
   if(recognizer){ recognizer.stop(); recognizer = null; micBtn.classList.remove('rec'); return; }
   if(!profile.key){ startWebSpeech(); return; }
 
-  if(useWav){
+  if(micMode === 'speech'){ startWebSpeech(); return; }
+
+  if(micMode === 'wav'){
     // AudioContext на iOS має зʼявитися синхронно, до будь-якого await
     try{
       const AC = window.AudioContext || window.webkitAudioContext;
@@ -779,6 +798,8 @@ micBtn.onclick = ()=>{
       audioCtx.resume();
     }catch(e){ console.error('audioctx:', e); }
   }
+  // якщо запис завис і нічого не віддав — не лишаємо кнопку залиплою
+  watchdog = setTimeout(()=>{ if(recording){ resetMic(); toast('Запис не відповів — спробуйте ще раз'); } }, 60000);
   startRec();
 };
 
@@ -793,8 +814,8 @@ function micError(e){
   );
 }
 
-async function startRec(){ return useWav ? startWav() : startMR(); }
-async function stopRec(){  return useWav ? stopWav()  : stopMR();  }
+async function startRec(){ return micMode === 'wav' ? startWav() : startMR(); }
+async function stopRec(){  return micMode === 'wav' ? stopWav()  : stopMR();  }
 
 /* ---- спосіб 1: MediaRecorder ---- */
 let mr = null, mrChunks = [], mrExt = 'webm';
@@ -812,7 +833,7 @@ function pickAudioType(){
 }
 
 async function startMR(){
-  if(!window.MediaRecorder){ useWav = true; store.set('planner.wav', true); toast('Спробуйте ще раз'); return; }
+  if(!window.MediaRecorder){ switchMode('wav', 'Інший спосіб запису — натисніть мікрофон ще раз'); return; }
   try{
     const stream = await navigator.mediaDevices.getUserMedia({ audio:true });
     const fmt = pickAudioType();
@@ -821,12 +842,11 @@ async function startMR(){
     mr.ondataavailable = e=>{ if(e.data && e.data.size) mrChunks.push(e.data); };
     mr.onstop = async ()=>{
       stream.getTracks().forEach(t=>t.stop());
-      recording = false; micBtn.classList.remove('rec');
-      const blob = new Blob(mrChunks, { type: mr.mimeType || 'audio/webm' });
+      resetMic();
+      const blob = new Blob(mrChunks, { type: (mr && mr.mimeType) || 'audio/webm' });
       mr = null;
       if(blob.size < 1000){
-        useWav = true; store.set('planner.wav', true);
-        toast('Спосіб запису не підійшов — натисніть мікрофон ще раз');
+        switchMode('wav', 'Інший спосіб запису — натисніть мікрофон ще раз');
         return;
       }
       await processAudio(blob, mrExt);
@@ -835,12 +855,12 @@ async function startMR(){
     recording = true; recStarted = Date.now();
     micBtn.classList.add('rec');
     toast('Говоріть… натисніть ще раз, щоб зупинити');
-  }catch(e){ recording = false; micBtn.classList.remove('rec'); micError(e); }
+  }catch(e){ resetMic(); micError(e); }
 }
 
 function stopMR(){
-  try{ mr && mr.state === 'recording' && mr.stop(); }
-  catch(e){ recording = false; micBtn.classList.remove('rec'); }
+  if(!mr || mr.state !== 'recording'){ resetMic(); return; }   // інакше кнопка залипає
+  try{ mr.stop(); }catch(e){ resetMic(); }
 }
 
 /* ---- спосіб 2: Web Audio → WAV ---- */
@@ -867,15 +887,18 @@ async function startWav(){
     recording = true; recStarted = Date.now();
     micBtn.classList.add('rec');
     toast('Говоріть… натисніть ще раз, щоб зупинити');
-  }catch(e){ recording = false; micBtn.classList.remove('rec'); micError(e); await cleanupWav(); }
+  }catch(e){ resetMic(); micError(e); await cleanupWav(); }
 }
 
 async function stopWav(){
-  recording = false; micBtn.classList.remove('rec');
+  resetMic();
   const rate = srcRate, data = pcm; pcm = [];
   await cleanupWav();
   const blob = encodeWav(data, rate, 16000);
-  if(blob.size < 4000){ toast('Запис порожній (' + blob.size + ' Б) — говоріть довше'); return; }
+  if(blob.size < 4000){
+    switchMode('speech', 'Перемикаю на розпізнавання браузера — натисніть ще раз');
+    return;
+  }
   await processAudio(blob, 'wav');
 }
 
@@ -1000,13 +1023,17 @@ async function parseWithLlama(text){
 /* fallback: Chrome speech recognition + локальний розбір */
 function startWebSpeech(){
   const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-  if(!SR){ toast('Додайте Groq ключ у налаштуваннях'); return; }
+  if(!SR){ toast('Браузер не підтримує розпізнавання голосу'); micMode='mr'; store.set('planner.micmode','mr'); return; }
   recognizer = new SR();
   recognizer.lang='uk-UA'; recognizer.interimResults=false; recognizer.maxAlternatives=1;
-  recognizer.onresult = e=>{ const text=e.results[0][0].transcript; recognizer=null; micBtn.classList.remove('rec'); prefill(localParse(text), text); };
-  recognizer.onerror = ()=>{ recognizer=null; micBtn.classList.remove('rec'); toast('Не вдалося розпізнати'); };
-  recognizer.onend  = ()=>{ recognizer=null; micBtn.classList.remove('rec'); };
-  recognizer.start(); micBtn.classList.add('rec');
+  recognizer.onresult = e=>{
+    const text = e.results[0][0].transcript;
+    recognizer = null; resetMic();
+    profile.key ? parseWithLlama(text) : prefill(localParse(text), text);
+  };
+  recognizer.onerror = ()=>{ recognizer=null; resetMic(); toast('Не вдалося розпізнати'); };
+  recognizer.onend  = ()=>{ recognizer=null; resetMic(); };
+  recognizer.start(); recording = false; micBtn.classList.add('rec');
   toast('Говоріть…');
 }
 
