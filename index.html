@@ -767,7 +767,22 @@ micBtn.onclick = ()=>{
     return;
   }
   if(recognizer){ recognizer.stop(); recognizer = null; micBtn.classList.remove('rec'); return; }
-  profile.key ? startRec() : startWebSpeech();
+  if(!profile.key){ startWebSpeech(); return; }
+
+  // iOS дозволяє звук лише якщо AudioContext створений синхронно
+  // всередині обробника дотику — до будь-якого await.
+  try{
+    const AC = window.AudioContext || window.webkitAudioContext;
+    if(!AC){ toast('Браузер не підтримує запис звуку'); return; }
+    if(!audioCtx || audioCtx.state === 'closed') audioCtx = new AC();
+    audioCtx.resume();
+    const unlock = audioCtx.createBufferSource();       // німий імпульс знімає блокування
+    unlock.buffer = audioCtx.createBuffer(1, 1, 22050);
+    unlock.connect(audioCtx.destination);
+    unlock.start(0);
+  }catch(e){ console.error('audioctx:', e); }
+
+  startRec();
 };
 
 async function startRec(){
@@ -775,8 +790,10 @@ async function startRec(){
     micStream = await navigator.mediaDevices.getUserMedia({
       audio:{ channelCount:1, echoCancellation:true, noiseSuppression:true }
     });
-    const AC = window.AudioContext || window.webkitAudioContext;
-    audioCtx = new AC();
+    if(!audioCtx || audioCtx.state === 'closed'){
+      const AC = window.AudioContext || window.webkitAudioContext;
+      audioCtx = new AC();
+    }
     if(audioCtx.state === 'suspended') await audioCtx.resume();
     srcRate = audioCtx.sampleRate;
 
@@ -796,7 +813,13 @@ async function startRec(){
     toast('Говоріть… натисніть ще раз, щоб зупинити');
   }catch(e){
     console.error('mic:', e);
-    toast('Немає доступу до мікрофона');
+    const n = e && e.name;
+    toast(
+      n === 'NotAllowedError'  ? 'Доступ до мікрофона заборонено в налаштуваннях' :
+      n === 'NotFoundError'    ? 'Мікрофон не знайдено' :
+      n === 'NotReadableError' ? 'Мікрофон зайнятий іншим застосунком' :
+      'Мікрофон недоступний: ' + (n || e.message || e)
+    );
     cleanupRec();
   }
 }
