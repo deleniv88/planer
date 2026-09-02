@@ -192,6 +192,29 @@ input,select,textarea{font:inherit;color:inherit}
 .status.on{display:block}
 
 /* toast */
+/* екран входу */
+.gate{position:fixed;inset:0;z-index:80;display:none;flex-direction:column;justify-content:center;
+  padding:32px 26px calc(40px + var(--safe-b));overflow-y:auto;
+  background:radial-gradient(120% 55% at 8% 100%, var(--bg-2) 0%, transparent 62%),
+             radial-gradient(100% 50% at 100% 100%, var(--bg-3) 0%, transparent 55%), var(--bg-1)}
+.gate.on{display:flex}
+.gate-in{width:100%;max-width:380px;margin:0 auto}
+.gate .mark{width:56px;height:56px;border-radius:17px;background:var(--accent);display:grid;place-items:center;margin-bottom:26px}
+.gate .mark svg{width:28px;height:28px;stroke:var(--btn-ink);stroke-width:2.4;fill:none;stroke-linecap:round}
+.gate h1{margin:0;font-size:31px;font-weight:800;letter-spacing:-.025em;line-height:1.12}
+.gate .sub{margin:11px 0 30px;color:var(--ink-2);font-size:14.5px;line-height:1.5}
+.gbtn{width:100%;padding:15px;border-radius:99px;background:#fff;color:#1F1F1F;font-size:15px;font-weight:600;
+  display:flex;align-items:center;justify-content:center;gap:10px}
+.gbtn svg{width:19px;height:19px}
+.sep{display:flex;align-items:center;gap:12px;margin:22px 0;color:var(--muted);font-size:12.5px;font-weight:600}
+.sep:before,.sep:after{content:"";flex:1;height:1px;background:var(--line)}
+.gate input{width:100%;padding:15px 17px;border-radius:15px;border:1.5px solid var(--line);
+  background:var(--field);font-size:15px;font-weight:500;outline:none;margin-bottom:10px}
+.gate input:focus{border-color:var(--accent)}
+.gate .save{margin-top:2px}
+.gate .skip{display:block;width:100%;text-align:center;margin-top:22px;color:var(--muted);font-size:13.5px;font-weight:600}
+.gate .cfgnote{margin-top:26px;padding-top:20px;border-top:1px solid var(--line)}
+
 .toast{
   position:fixed;left:50%;transform:translate(-50%,-24px);bottom:auto;top:18px;
   background:var(--pill);color:var(--pill-ink);padding:13px 20px;border-radius:99px;font-size:14px;font-weight:600;
@@ -261,6 +284,25 @@ input,select,textarea{font:inherit;color:inherit}
   </button>
 </div>
 
+<div class="gate" id="gate">
+  <div class="gate-in">
+    <div class="mark">
+      <svg viewBox="0 0 24 24"><path d="M8 2v4M16 2v4M3 9h18"/><rect x="3" y="4" width="18" height="17" rx="3"/><path d="M8 14l2.5 2.5L16 11"/></svg>
+    </div>
+    <h1>Плани</h1>
+    <p class="sub">Справи, календар і нагадування — на всіх ваших пристроях одразу.</p>
+
+    <button class="gbtn" id="googleBtn">
+      <svg viewBox="0 0 24 24"><path fill="#4285F4" d="M23 12.3c0-.8-.1-1.6-.2-2.3H12v4.5h6.2a5.3 5.3 0 0 1-2.3 3.5v2.9h3.7c2.2-2 3.4-5 3.4-8.6z"/><path fill="#34A853" d="M12 24c3.1 0 5.7-1 7.6-2.8l-3.7-2.9c-1 .7-2.3 1.1-3.9 1.1-3 0-5.5-2-6.4-4.7H1.8v3C3.7 21.4 7.6 24 12 24z"/><path fill="#FBBC05" d="M5.6 14.7a7.2 7.2 0 0 1 0-4.6v-3H1.8a12 12 0 0 0 0 10.6l3.8-3z"/><path fill="#EA4335" d="M12 4.8c1.7 0 3.2.6 4.4 1.7l3.2-3.2C17.7 1.5 15.1.5 12 .5 7.6.5 3.7 3 1.8 6.9l3.8 3C6.5 7.1 9 4.8 12 4.8z"/></svg>
+      Увійти через Google
+    </button>
+
+    <p class="skip" id="gateWarn" style="display:none;color:var(--accent)">
+      Не вказано anon key проєкту — вхід недоступний.
+    </p>
+  </div>
+</div>
+
 <div class="scrim" id="scrim"></div>
 
 <!-- add / edit sheet -->
@@ -324,31 +366,13 @@ input,select,textarea{font:inherit;color:inherit}
     <input id="fKey" type="password" placeholder="gsk_..." autocomplete="off">
     <p class="note">Потрібен для голосового вводу: <b>whisper-large-v3</b> розпізнає мову, <b>llama-3.3-70b-versatile</b> витягує з фрази назву, дату, час і категорію. Ключ зберігається лише у цьому браузері. Без ключа мікрофон перемкнеться на вбудоване розпізнавання Chrome.</p>
   </div>
-  <div class="field">
-    <label for="fSbUrl">Supabase URL</label>
-    <input id="fSbUrl" placeholder="https://xxxx.supabase.co" autocomplete="off">
-  </div>
-  <div class="field">
-    <label for="fSbKey">Supabase anon key</label>
-    <input id="fSbKey" type="password" placeholder="eyJ..." autocomplete="off">
-  </div>
-  <div class="field">
-    <label for="fVapid">VAPID public key</label>
-    <input id="fVapid" placeholder="B..." autocomplete="off">
-    <p class="note">Потрібні, щоб нагадування приходили при закритому застосунку. Без них працюють лише локальні таймери.</p>
-  </div>
-
   <button class="save" id="saveSet">Готово</button>
 
   <div class="field" style="margin-top:18px">
     <label>Акаунт</label>
     <div id="authBox">
       <div id="authOut">
-        <input id="fEmail" type="email" placeholder="ваша@пошта" autocomplete="email" style="margin-bottom:9px">
-        <div id="codeWrap" style="display:none">
-          <input id="fCode" inputmode="numeric" placeholder="Код з листа" autocomplete="one-time-code" style="margin-bottom:9px">
-        </div>
-        <button class="ghost" id="authBtn" style="margin:0">Надіслати код</button>
+        <p class="note" style="margin:0">Ви не увійшли.</p>
       </div>
       <div id="authIn" style="display:none">
         <p class="note" style="margin:0 0 9px">Ви увійшли як <b id="authEmail"></b>. Справи синхронізуються між пристроями.</p>
@@ -384,7 +408,17 @@ const CATS = {
 };
 let tasks   = store.get('planner.tasks', seed());
 let profile = store.get('planner.profile', { name:'', key:'' });
-let cfg     = store.get('planner.cfg', { url:'', anon:'', vapid:'' });
+/* Публічні за задумом: anon key захищений RLS, VAPID public — частина протоколу.
+   Впишіть один раз — і поля в налаштуваннях більше не знадобляться. */
+const SUPABASE_URL  = 'https://ctzqfayyhnvzffjwjeyh.supabase.co';
+const SUPABASE_ANON = '';   // ← вставте свій anon key
+const VAPID_PUBLIC  = 'BLKdsfg2iSFpKRBzHALHlIYVE1iyH2nvNdzBnmMfJvr-jAJr8TCT363FGfsdWK-BDtEnw2qhdDGell2HMZmHl8I';
+
+let cfg = store.get('planner.cfg', null) || { url:'', anon:'', vapid:'' };
+cfg.url   = cfg.url   || SUPABASE_URL;
+cfg.anon  = cfg.anon  || SUPABASE_ANON;
+cfg.vapid = cfg.vapid || VAPID_PUBLIC;
+store.set('planner.cfg', cfg);
 let session = store.get('planner.session', null);
 let dirty   = store.get('planner.dirty', []);
 let gone    = store.get('planner.gone', []);
@@ -644,18 +678,12 @@ document.getElementById('settingsBtn').onclick = ()=>{
   renderDiag(); renderAuth();
   document.getElementById('fName').value  = profile.name||'';
   document.getElementById('fKey').value   = profile.key||'';
-  document.getElementById('fSbUrl').value = cfg.url||'';
-  document.getElementById('fSbKey').value = cfg.anon||'';
-  document.getElementById('fVapid').value = cfg.vapid||'';
   scrim.classList.add('on'); setSheet.classList.add('on');
 };
 document.getElementById('saveSet').onclick = ()=>{
   profile.name = document.getElementById('fName').value.trim();
   profile.key  = document.getElementById('fKey').value.trim();
-  cfg.url   = document.getElementById('fSbUrl').value.trim();
-  cfg.anon  = document.getElementById('fSbKey').value.trim();
-  cfg.vapid = document.getElementById('fVapid').value.trim();
-  store.set('planner.profile', profile); store.set('planner.cfg', cfg);
+  store.set('planner.profile', profile);
   renderAuth(); syncTasks(); closeSheets(); renderAll(); toast('Збережено');
 };
 document.getElementById('wipe').onclick = ()=>{
@@ -899,49 +927,63 @@ async function freshToken(){
     return null;
   }
 }
-async function sendCode(){
-  const email = document.getElementById('fEmail').value.trim();
-  if(!configured()){ toast('Спершу впишіть Supabase URL і anon key'); return; }
-  if(!email){ toast('Впишіть пошту'); return; }
-  try{
-    await auth('otp', { email, create_user:true });
-    document.getElementById('codeWrap').style.display = 'block';
-    document.getElementById('authBtn').textContent = 'Увійти';
-    toast('Код надіслано на пошту');
-  }catch(e){ toast('Не вдалося: ' + String(e.message).slice(0,60)); }
-}
-async function verifyCode(){
-  const email = document.getElementById('fEmail').value.trim();
-  const token = document.getElementById('fCode').value.trim();
-  if(!token){ toast('Впишіть код з листа'); return; }
-  try{
-    const d = await auth('verify', { type:'email', email, token });
-    setSession(d);
-    renderAuth(); renderDiag();
-    toast('Вхід виконано');
-    await syncTasks(true);
-    renderAll();
-  }catch(e){ toast('Код не підійшов: ' + String(e.message).slice(0,50)); }
-}
 function signOut(){
   session = null; store.set('planner.session', null);
   dirty = []; gone = []; store.set('planner.dirty', []); store.set('planner.gone', []);
-  renderAuth(); renderDiag(); toast('Ви вийшли');
+  tasks = []; store.set('planner.tasks', tasks); store.set('planner.adopted', false);
+  renderAuth(); renderDiag(); renderAll(); refreshGate();
+  toast('Ви вийшли');
 }
 function renderAuth(){
   const inB = document.getElementById('authIn'), outB = document.getElementById('authOut');
-  if(session){
-    inB.style.display='block'; outB.style.display='none';
-    document.getElementById('authEmail').textContent = session.email;
-  }else{
-    inB.style.display='none'; outB.style.display='block';
-    document.getElementById('codeWrap').style.display='none';
-    document.getElementById('authBtn').textContent='Надіслати код';
-  }
+  inB.style.display  = session ? 'block' : 'none';
+  outB.style.display = session ? 'none'  : 'block';
+  if(session) document.getElementById('authEmail').textContent = session.email;
 }
-document.getElementById('authBtn').onclick = ()=>{
-  document.getElementById('codeWrap').style.display==='block' ? verifyCode() : sendCode();
+/* --- екран входу: тільки Google --- */
+function refreshGate(){
+  const on = !session;
+  document.getElementById('gate').classList.toggle('on', on);
+  if(on) document.getElementById('gateWarn').style.display = configured() ? 'none' : 'block';
+}
+
+document.getElementById('googleBtn').onclick = ()=>{
+  if(!configured()){ toast('Не вказано anon key проєкту'); return; }
+  const back = location.origin + location.pathname;
+  location.href = base() + '/auth/v1/authorize?provider=google&redirect_to=' + encodeURIComponent(back);
 };
+
+async function afterLogin(){
+  renderAuth(); renderDiag(); refreshGate();
+  toast('Вітаю, ' + (session.email || 'ви увійшли'));
+  adoptLocal();
+  await syncTasks(true);
+  renderAll();
+}
+
+/* Перший вхід на пристрої: підняти локальні справи в акаунт,
+   інакше вони затерлися б тим, що вже лежить у базі. */
+function adoptLocal(){
+  if(store.get('planner.adopted', false)) return;
+  tasks.forEach(t=>markDirty(t.id));
+  store.set('planner.adopted', true);
+}
+
+/* повернення з Google: токени приходять у хеші адреси */
+async function catchOAuth(){
+  const h = new URLSearchParams(location.hash.slice(1));
+  const at = h.get('access_token');
+  if(!at) return false;
+  history.replaceState({}, '', location.pathname);
+  try{
+    const r = await fetch(base()+'/auth/v1/user', { headers:{ apikey:cfg.anon, Authorization:'Bearer '+at } });
+    const u = await r.json();
+    setSession({ access_token:at, refresh_token:h.get('refresh_token'), expires_in:+(h.get('expires_in')||3600), user:u });
+    await afterLogin();
+    return true;
+  }catch(e){ toast('Не вдалося завершити вхід'); return false; }
+}
+
 document.getElementById('signOutBtn').onclick = signOut;
 
 /* --- REST --- */
@@ -1035,7 +1077,7 @@ document.getElementById('enablePushBtn').onclick = enablePush;
     }
   }catch(e){}
   renderAuth();
-  syncTasks();
+  if(!await catchOAuth()){ refreshGate(); syncTasks(); }
 })();
 
 if('serviceWorker' in navigator && location.protocol!=='file:'){
