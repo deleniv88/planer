@@ -791,14 +791,24 @@ async function processAudio(blob){
     const r = await fetch('https://api.groq.com/openai/v1/audio/transcriptions', {
       method:'POST', headers:{ Authorization:'Bearer '+profile.key }, body: fd
     });
-    if(!r.ok) throw new Error(await r.text());
+    if(!r.ok) throw new Error(r.status + ': ' + (await r.text()).slice(0,200));
     const { text } = await r.json();
     if(!text || !text.trim()){ toast('Нічого не почув'); return; }
     await parseWithLlama(text.trim());
   }catch(e){
-    console.error(e);
-    toast('Groq не відповів — перевірте ключ або CORS');
+    console.error('Groq STT:', e);
+    toast(groqError(e));
   }
+}
+
+function groqError(e){
+  const m = String(e && e.message || e);
+  if(/Failed to fetch|NetworkError|Load failed/i.test(m)) return 'Groq недоступний з браузера (CORS або мережа)';
+  if(m.startsWith('401')) return 'Groq: ключ недійсний або відкликаний';
+  if(m.startsWith('429')) return 'Groq: перевищено ліміт запитів';
+  if(/decommissioned|does not exist|model_not_found/i.test(m)) return 'Groq: модель більше не доступна';
+  if(m.startsWith('400')) return 'Groq відхилив запит: ' + m.slice(0,70);
+  return 'Groq: ' + m.slice(0,70);
 }
 
 const SYS = `Ти перетворюєш українську фразу на структуру завдання для планера.
@@ -840,13 +850,14 @@ async function parseWithLlama(text){
         messages:[{ role:'system', content:sys }, { role:'user', content:text }]
       })
     });
-    if(!r.ok) throw new Error(await r.text());
+    if(!r.ok) throw new Error(r.status + ': ' + (await r.text()).slice(0,200));
     const d = await r.json();
     const parsed = JSON.parse(d.choices[0].message.content.replace(/```json|```/g,'').trim());
     prefill(parsed, text);
   }catch(e){
-    console.error(e);
-    prefill(localParse(text), text);
+    console.error('Groq LLM:', e);
+    toast(groqError(e));
+    prefill(localParse(text), text);   // далі розбираємо власним парсером
   }
 }
 
