@@ -389,7 +389,11 @@ input,select,textarea{font:inherit;color:inherit}
 
   <button class="ghost" id="enablePushBtn">Увімкнути фонові нагадування</button>
   <button class="ghost" id="testNotif">Надіслати тестове сповіщення</button>
-  <button class="ghost" id="resetMic">Скинути спосіб запису голосу</button>
+  <div class="field" style="margin-top:14px">
+    <label>Спосіб запису голосу</label>
+    <div class="cats" id="micModes"></div>
+    <p class="note" id="micNote"></p>
+  </div>
   <div class="field" style="margin-top:14px">
     <label>Діагностика сповіщень</label>
     <div id="diag" class="note" style="background:var(--field);border:1.5px solid var(--line);border-radius:14px;padding:13px 15px"></div>
@@ -663,10 +667,25 @@ document.getElementById('clearDone').onclick = ()=>{
 };
 
 /* settings */
-document.getElementById('resetMic').onclick = ()=>{
-  micMode = 'mr'; store.set('planner.micmode','mr'); resetMic();
-  toast('Скинуто — застосунок знову спробує звичайний запис');
+const MIC_MODES = {
+  mr:     { label:'Звичайний', note:'MediaRecorder → Groq Whisper. Працює в Chrome і на Android.' },
+  wav:    { label:'Web Audio', note:'Сирі семпли → WAV → Groq Whisper. Запасний для Safari.' },
+  speech: { label:'Браузер',   note:'Розпізнає сам браузер, у Groq іде лише текст. Найнадійніше на iPhone.' }
 };
+function renderMicModes(){
+  const box = document.getElementById('micModes'); box.innerHTML = '';
+  Object.entries(MIC_MODES).forEach(([k, m])=>{
+    const b = document.createElement('button');
+    b.className = micMode === k ? 'on' : '';
+    b.textContent = m.label;
+    b.onclick = ()=>{
+      micMode = k; store.set('planner.micmode', k); resetMic();
+      renderMicModes(); toast('Спосіб: ' + m.label);
+    };
+    box.appendChild(b);
+  });
+  document.getElementById('micNote').textContent = MIC_MODES[micMode].note;
+}
 document.getElementById('testNotif').onclick = ()=>{
   notify({ id:'test', title:'Тестове нагадування', time:'', category:'work', note:'Якщо ви це бачите — доставка працює' });
 };
@@ -687,7 +706,7 @@ function renderDiag(){
   document.getElementById('diag').innerHTML = rows.join('<br>');
 }
 document.getElementById('settingsBtn').onclick = ()=>{
-  renderDiag(); renderAuth();
+  renderDiag(); renderAuth(); renderMicModes();
   document.getElementById('fName').value  = profile.name||'';
   document.getElementById('fKey').value   = profile.key||'';
   scrim.classList.add('on'); setSheet.classList.add('on');
@@ -845,8 +864,9 @@ async function startMR(){
       resetMic();
       const blob = new Blob(mrChunks, { type: (mr && mr.mimeType) || 'audio/webm' });
       mr = null;
+      console.log('MediaRecorder →', blob.size, 'байт,', mrExt);
       if(blob.size < 1000){
-        switchMode('wav', 'Інший спосіб запису — натисніть мікрофон ще раз');
+        switchMode('wav', 'MediaRecorder дав ' + blob.size + ' Б. Пробую Web Audio — натисніть ще раз');
         return;
       }
       await processAudio(blob, mrExt);
@@ -895,8 +915,9 @@ async function stopWav(){
   const rate = srcRate, data = pcm; pcm = [];
   await cleanupWav();
   const blob = encodeWav(data, rate, 16000);
+  console.log('WAV →', blob.size, 'байт,', data.length, 'блоків @', rate, 'Гц');
   if(blob.size < 4000){
-    switchMode('speech', 'Перемикаю на розпізнавання браузера — натисніть ще раз');
+    switchMode('speech', 'Web Audio дав ' + blob.size + ' Б. Пробую розпізнавання браузера — натисніть ще раз');
     return;
   }
   await processAudio(blob, 'wav');
