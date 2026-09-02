@@ -4,6 +4,12 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#12181E">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Плани">
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="icon-192.png">
 <title>Плани</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -318,7 +324,27 @@ input,select,textarea{font:inherit;color:inherit}
     <input id="fKey" type="password" placeholder="gsk_..." autocomplete="off">
     <p class="note">Потрібен для голосового вводу: <b>whisper-large-v3</b> розпізнає мову, <b>llama-3.3-70b-versatile</b> витягує з фрази назву, дату, час і категорію. Ключ зберігається лише у цьому браузері. Без ключа мікрофон перемкнеться на вбудоване розпізнавання Chrome.</p>
   </div>
+  <div class="field">
+    <label for="fSbUrl">Supabase URL</label>
+    <input id="fSbUrl" placeholder="https://xxxx.supabase.co" autocomplete="off">
+  </div>
+  <div class="field">
+    <label for="fSbKey">Supabase anon key</label>
+    <input id="fSbKey" type="password" placeholder="eyJ..." autocomplete="off">
+  </div>
+  <div class="field">
+    <label for="fVapid">VAPID public key</label>
+    <input id="fVapid" placeholder="B..." autocomplete="off">
+    <p class="note">Потрібні, щоб нагадування приходили при закритому застосунку. Без них працюють лише локальні таймери.</p>
+  </div>
+
   <button class="save" id="saveSet">Готово</button>
+  <button class="ghost" id="enablePushBtn">Увімкнути фонові нагадування</button>
+  <button class="ghost" id="testNotif">Надіслати тестове сповіщення</button>
+  <div class="field" style="margin-top:14px">
+    <label>Діагностика сповіщень</label>
+    <div id="diag" class="note" style="background:var(--field);border:1.5px solid var(--line);border-radius:14px;padding:13px 15px"></div>
+  </div>
   <button class="ghost" id="wipe">Стерти всі дані</button>
 </div>
 
@@ -340,12 +366,15 @@ const CATS = {
 };
 let tasks   = store.get('planner.tasks', seed());
 let profile = store.get('planner.profile', { name:'', key:'' });
+let cfg     = store.get('planner.cfg', { url:'', anon:'', vapid:'' });
+let deviceId = store.get('planner.device', '');
+if(!deviceId){ deviceId = uid() + uid(); store.set('planner.device', deviceId); }
 let cursor  = new Date();            // selected day
 let filter  = 'all';
 let view    = 'list';
 let editing = null;
 
-function save(){ store.set('planner.tasks', tasks); scheduleAll(); }
+function save(){ store.set('planner.tasks', tasks); scheduleAll(); syncReminders(); }
 function uid(){ return Math.random().toString(36).slice(2,10); }
 function iso(d){ const x=new Date(d); return new Date(x.getTime()-x.getTimezoneOffset()*6e4).toISOString().slice(0,10); }
 function seed(){
@@ -568,15 +597,41 @@ document.getElementById('clearDone').onclick = ()=>{
 };
 
 /* settings */
+document.getElementById('testNotif').onclick = ()=>{
+  notify({ id:'test', title:'Тестове нагадування', time:'', category:'work', note:'Якщо ви це бачите — доставка працює' });
+};
+function renderDiag(){
+  const ok = v => v ? '✅' : '❌';
+  const perm = ('Notification' in window) ? Notification.permission : 'немає API';
+  const rows = [
+    ok(location.protocol==='https:'||location.hostname==='localhost') + ' Протокол: ' + location.protocol,
+    ok('Notification' in window) + ' Notification API',
+    ok('serviceWorker' in navigator) + ' Service Worker',
+    ok('PushManager' in window) + ' Push API',
+    ok(standalone()) + ' Запущено з головного екрана',
+    ok(perm==='granted') + ' Дозвіл: ' + perm,
+    ok(!!(cfg.url && cfg.anon && cfg.vapid)) + ' Supabase налаштовано',
+    ok(pushOn) + ' Фонові нагадування (push)'
+  ];
+  document.getElementById('diag').innerHTML = rows.join('<br>');
+}
 document.getElementById('settingsBtn').onclick = ()=>{
-  document.getElementById('fName').value = profile.name||'';
-  document.getElementById('fKey').value  = profile.key||'';
+  renderDiag();
+  document.getElementById('fName').value  = profile.name||'';
+  document.getElementById('fKey').value   = profile.key||'';
+  document.getElementById('fSbUrl').value = cfg.url||'';
+  document.getElementById('fSbKey').value = cfg.anon||'';
+  document.getElementById('fVapid').value = cfg.vapid||'';
   scrim.classList.add('on'); setSheet.classList.add('on');
 };
 document.getElementById('saveSet').onclick = ()=>{
   profile.name = document.getElementById('fName').value.trim();
   profile.key  = document.getElementById('fKey').value.trim();
-  store.set('planner.profile', profile); closeSheets(); renderAll(); toast('Збережено');
+  cfg.url   = document.getElementById('fSbUrl').value.trim();
+  cfg.anon  = document.getElementById('fSbKey').value.trim();
+  cfg.vapid = document.getElementById('fVapid').value.trim();
+  store.set('planner.profile', profile); store.set('planner.cfg', cfg);
+  syncReminders(); closeSheets(); renderAll(); toast('Збережено');
 };
 document.getElementById('wipe').onclick = ()=>{
   if(!confirm('Стерти всі справи й налаштування?')) return;
@@ -593,11 +648,18 @@ document.getElementById('nextWk').onclick = ()=>{ cursor = addDays(cursor, view=
 
 /* ---------- notifications ---------- */
 document.getElementById('enableNotif').onclick = async ()=>{
-  if(!('Notification' in window)){ toast('Браузер не підтримує сповіщення'); return; }
+  if(location.protocol==='file:'){ toast('Відкрийте застосунок через https або localhost'); return; }
+  if(!('Notification' in window)){
+    toast(isIOS() ? 'На iPhone: Поділитись → На екран «Додому», далі відкрийте звідти' : 'Браузер не підтримує сповіщення');
+    return;
+  }
+  if(Notification.permission==='denied'){ toast('Дозвіл заблоковано — увімкніть у налаштуваннях сайту'); return; }
   const p = await Notification.requestPermission();
   toast(p==='granted'?'Сповіщення увімкнено':'Дозвіл не надано');
   renderAll(); scheduleAll();
 };
+function isIOS(){ return /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform==='MacIntel' && navigator.maxTouchPoints>1); }
+function standalone(){ return window.matchMedia('(display-mode: standalone)').matches || navigator.standalone===true; }
 let timers = [];
 function fireAt(t){
   if(!t.time || t.remind===null || t.remind===undefined || t.done) return null;
@@ -615,13 +677,17 @@ function scheduleAll(){
     }
   });
 }
-function notify(t){
+async function notify(t){
   const body = (t.time?t.time+' · ':'') + CATS[t.category].label + (t.note?' · '+t.note:'');
-  if('Notification' in window && Notification.permission==='granted'){
-    new Notification(t.title, { body, tag:t.id, icon:'data:image/svg+xml,'+encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><circle cx="32" cy="32" r="32" fill="%23E8A33D"/></svg>') });
-  } else {
-    toast('🔔 ' + t.title);
+  const opts = { body, tag:t.id, icon:'icon-192.png', badge:'icon-192.png', requireInteraction:true };
+  if(Notification.permission==='granted'){
+    try{
+      const reg = navigator.serviceWorker && await navigator.serviceWorker.getRegistration();
+      if(reg){ await reg.showNotification(t.title, opts); return; }   // єдиний шлях, що працює на iOS
+    }catch(e){ console.warn(e); }
+    try{ new Notification(t.title, opts); return; }catch(e){ console.warn(e); }
   }
+  toast('🔔 ' + t.title);
 }
 setInterval(scheduleAll, 5*60*1000);
 
@@ -763,6 +829,80 @@ function toast(msg){
 }
 
 /* ---------- go ---------- */
+/* ---------- фонові нагадування через Supabase + web push ---------- */
+let pushOn = false;
+
+function b64ToU8(b){
+  const pad='='.repeat((4-b.length%4)%4);
+  const raw=atob((b+pad).replace(/-/g,'+').replace(/_/g,'/'));
+  return Uint8Array.from([...raw].map(c=>c.charCodeAt(0)));
+}
+
+async function sb(path, opts={}){
+  const r = await fetch(cfg.url.replace(/\/$/,'') + '/rest/v1/' + path, Object.assign({}, opts, {
+    headers: Object.assign({
+      'Content-Type':'application/json',
+      apikey: cfg.anon,
+      Authorization: 'Bearer ' + cfg.anon,
+      Prefer: 'resolution=merge-duplicates,return=minimal'
+    }, opts.headers||{})
+  }));
+  if(!r.ok) throw new Error(r.status + ' ' + await r.text());
+  return null;
+}
+
+async function enablePush(){
+  if(!cfg.url || !cfg.anon || !cfg.vapid){ toast('Спершу впишіть Supabase URL, anon key і VAPID'); return; }
+  if(!('serviceWorker' in navigator) || !('PushManager' in window)){
+    toast(isIOS() && !standalone() ? 'Відкрийте застосунок з іконки на головному екрані' : 'Push тут не підтримується');
+    return;
+  }
+  try{
+    const perm = await Notification.requestPermission();
+    if(perm!=='granted'){ toast('Дозвіл не надано'); return; }
+    const reg = await navigator.serviceWorker.ready;
+    let sub = await reg.pushManager.getSubscription();
+    if(!sub) sub = await reg.pushManager.subscribe({ userVisibleOnly:true, applicationServerKey:b64ToU8(cfg.vapid) });
+    await sb('push_subscriptions?on_conflict=device_id', { method:'POST', body: JSON.stringify({ device_id:deviceId, subscription:sub.toJSON() }) });
+    await syncReminders();
+    pushOn = true;
+    toast('Фонові нагадування увімкнено');
+    renderDiag();
+  }catch(e){ console.error(e); toast('Не вдалося підписатись: ' + String(e.message||e).slice(0,60)); }
+}
+
+async function syncReminders(){
+  if(!cfg.url || !cfg.anon) return;
+  const rows = tasks
+    .map(t=>({ t, at: fireAt(t) }))
+    .filter(x => x.at !== null && x.at > Date.now() - 60000)
+    .map(({t,at})=>({
+      id: deviceId + ':' + t.id,
+      device_id: deviceId,
+      title: t.title,
+      body: (t.time ? t.time + ' · ' : '') + CATS[t.category].label + (t.note ? ' · ' + t.note : ''),
+      fire_at: new Date(at).toISOString()
+    }));
+  try{
+    await sb('reminders?device_id=eq.' + deviceId, { method:'DELETE' });
+    if(rows.length) await sb('reminders', { method:'POST', body: JSON.stringify(rows) });
+  }catch(e){ console.warn('sync reminders:', e); }
+}
+
+document.getElementById('enablePushBtn').onclick = enablePush;
+
+(async ()=>{
+  try{
+    if(!('serviceWorker' in navigator)) return;
+    const reg = await navigator.serviceWorker.getRegistration();
+    pushOn = !!(reg && await reg.pushManager.getSubscription());
+  }catch(e){}
+})();
+
+if('serviceWorker' in navigator && location.protocol!=='file:'){
+  navigator.serviceWorker.register('sw.js').catch(e=>console.warn('SW:', e));
+}
+document.addEventListener('visibilitychange', ()=>{ if(!document.hidden){ scheduleAll(); renderAll(); } });
 renderCats(); renderAll(); scheduleAll();
 document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeSheets(); });
 </script>
