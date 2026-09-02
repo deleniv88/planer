@@ -339,6 +339,24 @@ input,select,textarea{font:inherit;color:inherit}
   </div>
 
   <button class="save" id="saveSet">Готово</button>
+
+  <div class="field" style="margin-top:18px">
+    <label>Акаунт</label>
+    <div id="authBox">
+      <div id="authOut">
+        <input id="fEmail" type="email" placeholder="ваша@пошта" autocomplete="email" style="margin-bottom:9px">
+        <div id="codeWrap" style="display:none">
+          <input id="fCode" inputmode="numeric" placeholder="Код з листа" autocomplete="one-time-code" style="margin-bottom:9px">
+        </div>
+        <button class="ghost" id="authBtn" style="margin:0">Надіслати код</button>
+      </div>
+      <div id="authIn" style="display:none">
+        <p class="note" style="margin:0 0 9px">Ви увійшли як <b id="authEmail"></b>. Справи синхронізуються між пристроями.</p>
+        <button class="ghost" id="signOutBtn" style="margin:0">Вийти</button>
+      </div>
+    </div>
+  </div>
+
   <button class="ghost" id="enablePushBtn">Увімкнути фонові нагадування</button>
   <button class="ghost" id="testNotif">Надіслати тестове сповіщення</button>
   <div class="field" style="margin-top:14px">
@@ -367,6 +385,9 @@ const CATS = {
 let tasks   = store.get('planner.tasks', seed());
 let profile = store.get('planner.profile', { name:'', key:'' });
 let cfg     = store.get('planner.cfg', { url:'', anon:'', vapid:'' });
+let session = store.get('planner.session', null);
+let dirty   = store.get('planner.dirty', []);
+let gone    = store.get('planner.gone', []);
 let deviceId = store.get('planner.device', '');
 if(!deviceId){ deviceId = uid() + uid(); store.set('planner.device', deviceId); }
 let cursor  = new Date();            // selected day
@@ -374,7 +395,9 @@ let filter  = 'all';
 let view    = 'list';
 let editing = null;
 
-function save(){ store.set('planner.tasks', tasks); scheduleAll(); syncReminders(); }
+function save(){ store.set('planner.tasks', tasks); scheduleAll(); pushLocal(); }
+function markDirty(id){ if(!dirty.includes(id)) dirty.push(id); store.set('planner.dirty', dirty); }
+function markDeleted(id){ if(!gone.includes(id)) gone.push(id); store.set('planner.gone', gone); dirty = dirty.filter(x=>x!==id); store.set('planner.dirty', dirty); }
 function uid(){ return Math.random().toString(36).slice(2,10); }
 function iso(d){ const x=new Date(d); return new Date(x.getTime()-x.getTimezoneOffset()*6e4).toISOString().slice(0,10); }
 function seed(){
@@ -477,7 +500,7 @@ function renderList(){
         <div class="t-meta">${c.label}${t.remind!==null&&t.remind!==undefined&&t.time?' · 🔔 '+remindLabel(t.remind):''}${t.note?' · '+esc(t.note.slice(0,28)):''}</div>
       </div>
       ${t.time?`<div class="t-time"><div class="b">${t.time}</div></div>`:''}`;
-    el.querySelector('.check').onclick = e=>{ e.stopPropagation(); t.done=!t.done; save(); renderAll(); };
+    el.querySelector('.check').onclick = e=>{ e.stopPropagation(); t.done=!t.done; markDirty(t.id); save(); renderAll(); };
     el.onclick = ()=>openSheet(t);
     list.appendChild(el);
   });
@@ -580,18 +603,19 @@ document.getElementById('saveTask').onclick = ()=>{
     remind: r===''?null:+r,
     category: cat
   };
-  if(editing){ Object.assign(editing, data); }
-  else { tasks.push({ id:uid(), done:false, ...data }); }
+  if(editing){ Object.assign(editing, data); markDirty(editing.id); }
+  else { const t = { id:uid(), done:false, ...data }; tasks.push(t); markDirty(t.id); }
   cursor = new Date(data.date+'T12:00');
   save(); closeSheets(); renderAll();
   toast(editing?'Збережено':'Справу додано');
 };
 document.getElementById('deleteTask').onclick = ()=>{
-  tasks = tasks.filter(t=>t.id!==editing.id); save(); closeSheets(); renderAll(); toast('Видалено');
+  markDeleted(editing.id); tasks = tasks.filter(t=>t.id!==editing.id); save(); closeSheets(); renderAll(); toast('Видалено');
 };
 document.getElementById('clearDone').onclick = ()=>{
   const n = tasks.filter(t=>t.done && t.date===iso(cursor)).length;
   if(!n){ toast('Виконаних справ немає'); return; }
+  tasks.filter(t=>t.done && t.date===iso(cursor)).forEach(t=>markDeleted(t.id));
   tasks = tasks.filter(t=>!(t.done && t.date===iso(cursor)));
   save(); renderAll(); toast('Прибрано: '+n);
 };
@@ -611,12 +635,13 @@ function renderDiag(){
     ok(standalone()) + ' Запущено з головного екрана',
     ok(perm==='granted') + ' Дозвіл: ' + perm,
     ok(!!(cfg.url && cfg.anon && cfg.vapid)) + ' Supabase налаштовано',
-    ok(pushOn) + ' Фонові нагадування (push)'
+    ok(pushOn) + ' Фонові нагадування (push)',
+    ok(!!session) + ' Вхід: ' + (session ? session.email : 'не виконано')
   ];
   document.getElementById('diag').innerHTML = rows.join('<br>');
 }
 document.getElementById('settingsBtn').onclick = ()=>{
-  renderDiag();
+  renderDiag(); renderAuth();
   document.getElementById('fName').value  = profile.name||'';
   document.getElementById('fKey').value   = profile.key||'';
   document.getElementById('fSbUrl').value = cfg.url||'';
@@ -631,7 +656,7 @@ document.getElementById('saveSet').onclick = ()=>{
   cfg.anon  = document.getElementById('fSbKey').value.trim();
   cfg.vapid = document.getElementById('fVapid').value.trim();
   store.set('planner.profile', profile); store.set('planner.cfg', cfg);
-  syncReminders(); closeSheets(); renderAll(); toast('Збережено');
+  renderAuth(); syncTasks(); closeSheets(); renderAll(); toast('Збережено');
 };
 document.getElementById('wipe').onclick = ()=>{
   if(!confirm('Стерти всі справи й налаштування?')) return;
@@ -829,7 +854,7 @@ function toast(msg){
 }
 
 /* ---------- go ---------- */
-/* ---------- фонові нагадування через Supabase + web push ---------- */
+/* ---------- Supabase: акаунт, синхронізація, push ---------- */
 let pushOn = false;
 
 function b64ToU8(b){
@@ -837,22 +862,150 @@ function b64ToU8(b){
   const raw=atob((b+pad).replace(/-/g,'+').replace(/_/g,'/'));
   return Uint8Array.from([...raw].map(c=>c.charCodeAt(0)));
 }
+const base = ()=> cfg.url.replace(/\/$/,'');
+const configured = ()=> !!(cfg.url && cfg.anon);
 
+/* --- авторизація (email + одноразовий код) --- */
+async function auth(path, body){
+  const r = await fetch(base()+'/auth/v1/'+path, {
+    method:'POST',
+    headers:{ 'Content-Type':'application/json', apikey:cfg.anon },
+    body: JSON.stringify(body)
+  });
+  const d = await r.json().catch(()=>({}));
+  if(!r.ok) throw new Error(d.error_description || d.msg || d.message || ('HTTP '+r.status));
+  return d;
+}
+function setSession(d){
+  session = {
+    access_token: d.access_token,
+    refresh_token: d.refresh_token,
+    expires_at: Date.now() + (d.expires_in ?? 3600)*1000,
+    email: d.user?.email || '',
+    user_id: d.user?.id || ''
+  };
+  store.set('planner.session', session);
+}
+async function freshToken(){
+  if(!session) return null;
+  if(Date.now() < session.expires_at - 60000) return session.access_token;
+  try{
+    const d = await auth('token?grant_type=refresh_token', { refresh_token: session.refresh_token });
+    setSession(d);
+    return session.access_token;
+  }catch(e){
+    console.warn('refresh failed', e);
+    session = null; store.set('planner.session', null);
+    return null;
+  }
+}
+async function sendCode(){
+  const email = document.getElementById('fEmail').value.trim();
+  if(!configured()){ toast('Спершу впишіть Supabase URL і anon key'); return; }
+  if(!email){ toast('Впишіть пошту'); return; }
+  try{
+    await auth('otp', { email, create_user:true });
+    document.getElementById('codeWrap').style.display = 'block';
+    document.getElementById('authBtn').textContent = 'Увійти';
+    toast('Код надіслано на пошту');
+  }catch(e){ toast('Не вдалося: ' + String(e.message).slice(0,60)); }
+}
+async function verifyCode(){
+  const email = document.getElementById('fEmail').value.trim();
+  const token = document.getElementById('fCode').value.trim();
+  if(!token){ toast('Впишіть код з листа'); return; }
+  try{
+    const d = await auth('verify', { type:'email', email, token });
+    setSession(d);
+    renderAuth(); renderDiag();
+    toast('Вхід виконано');
+    await syncTasks(true);
+    renderAll();
+  }catch(e){ toast('Код не підійшов: ' + String(e.message).slice(0,50)); }
+}
+function signOut(){
+  session = null; store.set('planner.session', null);
+  dirty = []; gone = []; store.set('planner.dirty', []); store.set('planner.gone', []);
+  renderAuth(); renderDiag(); toast('Ви вийшли');
+}
+function renderAuth(){
+  const inB = document.getElementById('authIn'), outB = document.getElementById('authOut');
+  if(session){
+    inB.style.display='block'; outB.style.display='none';
+    document.getElementById('authEmail').textContent = session.email;
+  }else{
+    inB.style.display='none'; outB.style.display='block';
+    document.getElementById('codeWrap').style.display='none';
+    document.getElementById('authBtn').textContent='Надіслати код';
+  }
+}
+document.getElementById('authBtn').onclick = ()=>{
+  document.getElementById('codeWrap').style.display==='block' ? verifyCode() : sendCode();
+};
+document.getElementById('signOutBtn').onclick = signOut;
+
+/* --- REST --- */
 async function sb(path, opts={}){
-  const r = await fetch(cfg.url.replace(/\/$/,'') + '/rest/v1/' + path, Object.assign({}, opts, {
+  const token = await freshToken();
+  const r = await fetch(base() + '/rest/v1/' + path, Object.assign({}, opts, {
     headers: Object.assign({
       'Content-Type':'application/json',
       apikey: cfg.anon,
-      Authorization: 'Bearer ' + cfg.anon,
-      Prefer: 'resolution=merge-duplicates,return=minimal'
+      Authorization: 'Bearer ' + (token || cfg.anon),
+      Prefer: 'resolution=merge-duplicates,return=representation'
     }, opts.headers||{})
   }));
   if(!r.ok) throw new Error(r.status + ' ' + await r.text());
-  return null;
+  return r.status===204 ? null : r.json().catch(()=>null);
 }
 
+/* --- синхронізація завдань --- */
+function toRow(t){
+  const at = fireAt(t);
+  return {
+    id: t.id, title: t.title, note: t.note||'', date: t.date, time: t.time||'',
+    category: t.category, remind: (t.remind===null||t.remind===undefined)?null:t.remind,
+    done: !!t.done,
+    fire_at: at===null ? null : new Date(at).toISOString(),
+    notified_at: null,
+    updated_at: new Date().toISOString()
+  };
+}
+function fromRow(r){
+  return { id:r.id, title:r.title, note:r.note||'', date:r.date, time:r.time||'',
+           category:r.category, remind:r.remind, done:!!r.done };
+}
+let syncing = false;
+async function syncTasks(replace=false){
+  if(!configured() || !session || syncing) return;
+  syncing = true;
+  try{
+    if(gone.length){
+      await sb('tasks?id=in.(' + gone.map(encodeURIComponent).join(',') + ')', { method:'DELETE' });
+      gone = []; store.set('planner.gone', gone);
+    }
+    if(dirty.length){
+      const rows = tasks.filter(t=>dirty.includes(t.id)).map(toRow);
+      if(rows.length) await sb('tasks?on_conflict=id', { method:'POST', body: JSON.stringify(rows) });
+      dirty = []; store.set('planner.dirty', dirty);
+    }
+    const server = await sb('tasks?select=*&order=date.asc');
+    if(Array.isArray(server)){
+      tasks = server.map(fromRow);
+      store.set('planner.tasks', tasks);
+      scheduleAll();
+      if(!replace) renderAll();
+    }
+  }catch(e){ console.warn('sync:', e); }
+  finally{ syncing = false; }
+}
+let pushTimer;
+function pushLocal(){ clearTimeout(pushTimer); pushTimer = setTimeout(()=>syncTasks(), 800); }
+
+/* --- push --- */
 async function enablePush(){
-  if(!cfg.url || !cfg.anon || !cfg.vapid){ toast('Спершу впишіть Supabase URL, anon key і VAPID'); return; }
+  if(!configured() || !cfg.vapid){ toast('Спершу впишіть Supabase URL, anon key і VAPID'); return; }
+  if(!session){ toast('Спершу увійдіть у акаунт'); return; }
   if(!('serviceWorker' in navigator) || !('PushManager' in window)){
     toast(isIOS() && !standalone() ? 'Відкрийте застосунок з іконки на головному екрані' : 'Push тут не підтримується');
     return;
@@ -863,46 +1016,32 @@ async function enablePush(){
     const reg = await navigator.serviceWorker.ready;
     let sub = await reg.pushManager.getSubscription();
     if(!sub) sub = await reg.pushManager.subscribe({ userVisibleOnly:true, applicationServerKey:b64ToU8(cfg.vapid) });
-    await sb('push_subscriptions?on_conflict=device_id', { method:'POST', body: JSON.stringify({ device_id:deviceId, subscription:sub.toJSON() }) });
-    await syncReminders();
+    await sb('push_subscriptions?on_conflict=device_id', {
+      method:'POST',
+      body: JSON.stringify({ device_id:deviceId, subscription:sub.toJSON() })
+    });
     pushOn = true;
     toast('Фонові нагадування увімкнено');
     renderDiag();
   }catch(e){ console.error(e); toast('Не вдалося підписатись: ' + String(e.message||e).slice(0,60)); }
 }
-
-async function syncReminders(){
-  if(!cfg.url || !cfg.anon) return;
-  const rows = tasks
-    .map(t=>({ t, at: fireAt(t) }))
-    .filter(x => x.at !== null && x.at > Date.now() - 60000)
-    .map(({t,at})=>({
-      id: deviceId + ':' + t.id,
-      device_id: deviceId,
-      title: t.title,
-      body: (t.time ? t.time + ' · ' : '') + CATS[t.category].label + (t.note ? ' · ' + t.note : ''),
-      fire_at: new Date(at).toISOString()
-    }));
-  try{
-    await sb('reminders?device_id=eq.' + deviceId, { method:'DELETE' });
-    if(rows.length) await sb('reminders', { method:'POST', body: JSON.stringify(rows) });
-  }catch(e){ console.warn('sync reminders:', e); }
-}
-
 document.getElementById('enablePushBtn').onclick = enablePush;
 
 (async ()=>{
   try{
-    if(!('serviceWorker' in navigator)) return;
-    const reg = await navigator.serviceWorker.getRegistration();
-    pushOn = !!(reg && await reg.pushManager.getSubscription());
+    if('serviceWorker' in navigator){
+      const reg = await navigator.serviceWorker.getRegistration();
+      pushOn = !!(reg && await reg.pushManager.getSubscription());
+    }
   }catch(e){}
+  renderAuth();
+  syncTasks();
 })();
 
 if('serviceWorker' in navigator && location.protocol!=='file:'){
   navigator.serviceWorker.register('sw.js').catch(e=>console.warn('SW:', e));
 }
-document.addEventListener('visibilitychange', ()=>{ if(!document.hidden){ scheduleAll(); renderAll(); } });
+document.addEventListener('visibilitychange', ()=>{ if(!document.hidden){ scheduleAll(); renderAll(); syncTasks(); } });
 renderCats(); renderAll(); scheduleAll();
 document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeSheets(); });
 </script>
