@@ -753,12 +753,14 @@ setInterval(scheduleAll, 5*60*1000);
 
 /* ---------- voice ---------- */
 const micBtn = document.getElementById('micBtn');
-let recognizer = null, recStarted = 0;
+let recognizer = null, recStarted = 0, recording = false;
 
-/* Запис через Web Audio: MediaRecorder на iOS віддає порожній файл,
-   тому збираємо сирі семпли самі й пакуємо у WAV — його розуміють усі. */
-let audioCtx = null, procNode = null, srcNode = null, micStream = null;
-let pcm = [], recording = false, srcRate = 44100;
+/* Два способи запису:
+   1) MediaRecorder — простий, працює в Chrome/Firefox/Android;
+   2) Web Audio → WAV — запасний, вмикається сам, якщо перший віддав
+      порожній файл (так поводиться Safari на частині iOS).
+   Обраний спосіб памʼятаємо, щоб не наступати на ті самі граблі. */
+let useWav = store.get('planner.wav', false);
 
 micBtn.onclick = ()=>{
   if(recording){
@@ -769,27 +771,85 @@ micBtn.onclick = ()=>{
   if(recognizer){ recognizer.stop(); recognizer = null; micBtn.classList.remove('rec'); return; }
   if(!profile.key){ startWebSpeech(); return; }
 
-  // iOS дозволяє звук лише якщо AudioContext створений синхронно
-  // всередині обробника дотику — до будь-якого await.
-  try{
-    const AC = window.AudioContext || window.webkitAudioContext;
-    if(!AC){ toast('Браузер не підтримує запис звуку'); return; }
-    if(!audioCtx || audioCtx.state === 'closed') audioCtx = new AC();
-    audioCtx.resume();
-    const unlock = audioCtx.createBufferSource();       // німий імпульс знімає блокування
-    unlock.buffer = audioCtx.createBuffer(1, 1, 22050);
-    unlock.connect(audioCtx.destination);
-    unlock.start(0);
-  }catch(e){ console.error('audioctx:', e); }
-
+  if(useWav){
+    // AudioContext на iOS має зʼявитися синхронно, до будь-якого await
+    try{
+      const AC = window.AudioContext || window.webkitAudioContext;
+      if(!audioCtx || audioCtx.state === 'closed') audioCtx = new AC();
+      audioCtx.resume();
+    }catch(e){ console.error('audioctx:', e); }
+  }
   startRec();
 };
 
-async function startRec(){
+function micError(e){
+  console.error('mic:', e);
+  const n = e && e.name;
+  toast(
+    n === 'NotAllowedError'  ? 'Доступ до мікрофона заборонено' :
+    n === 'NotFoundError'    ? 'Мікрофон не знайдено' :
+    n === 'NotReadableError' ? 'Мікрофон зайнятий іншим застосунком' :
+    'Мікрофон недоступний: ' + (n || (e && e.message) || e)
+  );
+}
+
+async function startRec(){ return useWav ? startWav() : startMR(); }
+async function stopRec(){  return useWav ? stopWav()  : stopMR();  }
+
+/* ---- спосіб 1: MediaRecorder ---- */
+let mr = null, mrChunks = [], mrExt = 'webm';
+
+function pickAudioType(){
+  const list = [
+    ['audio/webm;codecs=opus','webm'], ['audio/webm','webm'],
+    ['audio/mp4;codecs=mp4a.40.2','m4a'], ['audio/mp4','m4a'],
+    ['audio/ogg;codecs=opus','ogg']
+  ];
+  for(const [mime, ext] of list){
+    if(window.MediaRecorder && MediaRecorder.isTypeSupported && MediaRecorder.isTypeSupported(mime)) return { mime, ext };
+  }
+  return { mime:'', ext:'webm' };
+}
+
+async function startMR(){
+  if(!window.MediaRecorder){ useWav = true; store.set('planner.wav', true); toast('Спробуйте ще раз'); return; }
   try{
-    micStream = await navigator.mediaDevices.getUserMedia({
-      audio:{ channelCount:1, echoCancellation:true, noiseSuppression:true }
-    });
+    const stream = await navigator.mediaDevices.getUserMedia({ audio:true });
+    const fmt = pickAudioType();
+    mrChunks = []; mrExt = fmt.ext;
+    mr = new MediaRecorder(stream, fmt.mime ? { mimeType: fmt.mime } : undefined);
+    mr.ondataavailable = e=>{ if(e.data && e.data.size) mrChunks.push(e.data); };
+    mr.onstop = async ()=>{
+      stream.getTracks().forEach(t=>t.stop());
+      recording = false; micBtn.classList.remove('rec');
+      const blob = new Blob(mrChunks, { type: mr.mimeType || 'audio/webm' });
+      mr = null;
+      if(blob.size < 1000){
+        useWav = true; store.set('planner.wav', true);
+        toast('Спосіб запису не підійшов — натисніть мікрофон ще раз');
+        return;
+      }
+      await processAudio(blob, mrExt);
+    };
+    mr.start();
+    recording = true; recStarted = Date.now();
+    micBtn.classList.add('rec');
+    toast('Говоріть… натисніть ще раз, щоб зупинити');
+  }catch(e){ recording = false; micBtn.classList.remove('rec'); micError(e); }
+}
+
+function stopMR(){
+  try{ mr && mr.state === 'recording' && mr.stop(); }
+  catch(e){ recording = false; micBtn.classList.remove('rec'); }
+}
+
+/* ---- спосіб 2: Web Audio → WAV ---- */
+let audioCtx = null, procNode = null, srcNode = null, micStream = null;
+let pcm = [], srcRate = 44100;
+
+async function startWav(){
+  try{
+    micStream = await navigator.mediaDevices.getUserMedia({ audio:{ channelCount:1 } });
     if(!audioCtx || audioCtx.state === 'closed'){
       const AC = window.AudioContext || window.webkitAudioContext;
       audioCtx = new AC();
@@ -800,42 +860,26 @@ async function startRec(){
     srcNode  = audioCtx.createMediaStreamSource(micStream);
     procNode = audioCtx.createScriptProcessor(4096, 1, 1);
     pcm = [];
-    procNode.onaudioprocess = e=>{
-      if(recording) pcm.push(new Float32Array(e.inputBuffer.getChannelData(0)));
-    };
-    // глушник: вузол має бути підключений до виходу, але чути себе не треба
-    const mute = audioCtx.createGain();
-    mute.gain.value = 0;
+    procNode.onaudioprocess = e=>{ if(recording) pcm.push(new Float32Array(e.inputBuffer.getChannelData(0))); };
+    const mute = audioCtx.createGain(); mute.gain.value = 0;
     srcNode.connect(procNode); procNode.connect(mute); mute.connect(audioCtx.destination);
 
     recording = true; recStarted = Date.now();
     micBtn.classList.add('rec');
     toast('Говоріть… натисніть ще раз, щоб зупинити');
-  }catch(e){
-    console.error('mic:', e);
-    const n = e && e.name;
-    toast(
-      n === 'NotAllowedError'  ? 'Доступ до мікрофона заборонено в налаштуваннях' :
-      n === 'NotFoundError'    ? 'Мікрофон не знайдено' :
-      n === 'NotReadableError' ? 'Мікрофон зайнятий іншим застосунком' :
-      'Мікрофон недоступний: ' + (n || e.message || e)
-    );
-    cleanupRec();
-  }
+  }catch(e){ recording = false; micBtn.classList.remove('rec'); micError(e); await cleanupWav(); }
 }
 
-async function stopRec(){
-  recording = false;
-  micBtn.classList.remove('rec');
-  const rate = srcRate, data = pcm;
-  pcm = [];
-  await cleanupRec();
+async function stopWav(){
+  recording = false; micBtn.classList.remove('rec');
+  const rate = srcRate, data = pcm; pcm = [];
+  await cleanupWav();
   const blob = encodeWav(data, rate, 16000);
   if(blob.size < 4000){ toast('Запис порожній (' + blob.size + ' Б) — говоріть довше'); return; }
   await processAudio(blob, 'wav');
 }
 
-async function cleanupRec(){
+async function cleanupWav(){
   try{ procNode && procNode.disconnect(); }catch(e){}
   try{ srcNode  && srcNode.disconnect();  }catch(e){}
   try{ micStream && micStream.getTracks().forEach(t=>t.stop()); }catch(e){}
@@ -853,12 +897,10 @@ function encodeWav(chunks, inRate, outRate){
   const outLen = Math.floor(flat.length / ratio);
   const out = new Int16Array(outLen);
   for(let i = 0; i < outLen; i++){
-    // усереднюємо вікно замість простої вибірки — менше пилки
-    const start = Math.floor(i * ratio), end = Math.min(Math.floor((i+1) * ratio), flat.length);
+    const st = Math.floor(i * ratio), en = Math.min(Math.floor((i+1) * ratio), flat.length);
     let sum = 0, n = 0;
-    for(let j = start; j < end; j++){ sum += flat[j]; n++; }
-    const v = n ? sum / n : 0;
-    out[i] = Math.max(-1, Math.min(1, v)) * 0x7FFF;
+    for(let j = st; j < en; j++){ sum += flat[j]; n++; }
+    out[i] = Math.max(-1, Math.min(1, n ? sum / n : 0)) * 0x7FFF;
   }
 
   const buf = new ArrayBuffer(44 + out.length * 2);
