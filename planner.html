@@ -1,0 +1,767 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#EFE1E1">
+<title>Плани</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg-1:#F1E4E6; --bg-2:#F6E8DC; --bg-3:#E3E9DA;
+  --ink:#2A1B12; --ink-2:#6E5B50; --ink-3:#A2918700;
+  --muted:#9C8A80;
+  --surface:#FFFFFF;
+  --card-r:22px;
+  --accent:#F2703A;
+  --banner:#F8C9A4;
+  --work:#F7B98E; --private:#B8D3A4; --company:#D9B4E0;
+  --shadow:0 6px 20px rgba(87,58,42,.07);
+  --safe-b:env(safe-area-inset-bottom,0px);
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;padding:0}
+body{
+  font-family:'Plus Jakarta Sans',system-ui,sans-serif;
+  color:var(--ink);
+  background:
+    radial-gradient(120% 60% at 10% 100%, var(--bg-2) 0%, transparent 60%),
+    radial-gradient(100% 55% at 100% 100%, var(--bg-3) 0%, transparent 55%),
+    var(--bg-1);
+  background-attachment:fixed;
+  min-height:100vh;
+}
+button{font:inherit;color:inherit;border:0;background:none;cursor:pointer}
+input,select,textarea{font:inherit;color:inherit}
+
+.app{max-width:460px;margin:0 auto;padding:22px 20px calc(120px + var(--safe-b));position:relative}
+
+/* header */
+.top{display:flex;align-items:flex-start;justify-content:space-between;gap:14px}
+.hello{font-size:31px;font-weight:800;letter-spacing:-.02em;line-height:1.1;margin:0}
+.today{margin:8px 0 0;color:var(--ink-2);font-size:14.5px;font-weight:500}
+.avatar{width:52px;height:52px;border-radius:50%;flex:none;background:#F6D9A8;display:grid;place-items:center;font-size:26px;box-shadow:var(--shadow)}
+
+/* week strip */
+.week{margin-top:22px}
+.wk-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:2px}
+.wk-nav{display:flex;gap:4px}
+.wk-nav button{width:28px;height:28px;border-radius:50%;display:grid;place-items:center;color:var(--muted)}
+.wk-nav button:hover{background:rgba(255,255,255,.6);color:var(--ink)}
+.wk-label{font-size:13px;font-weight:600;color:var(--ink-2)}
+.days{display:grid;grid-template-columns:repeat(7,1fr);gap:6px;margin-top:10px}
+.dow{text-align:center;font-size:13px;font-weight:500;color:var(--muted)}
+.dow.on{color:var(--ink);font-weight:700}
+.dnum{
+  aspect-ratio:1/1;border-radius:50%;background:var(--surface);
+  display:grid;place-items:center;font-size:16px;font-weight:600;
+  box-shadow:var(--shadow);position:relative;transition:transform .16s ease
+}
+.dnum:active{transform:scale(.92)}
+.dnum.on{background:var(--ink);color:#fff}
+.dnum.today-ring:not(.on){box-shadow:var(--shadow),inset 0 0 0 1.5px var(--accent)}
+.dots{position:absolute;bottom:7px;display:flex;gap:2.5px}
+.dots i{width:4px;height:4px;border-radius:50%;display:block}
+.dnum.on .dots i{background:#fff !important}
+
+/* banner */
+.banner{
+  margin-top:20px;background:var(--banner);border-radius:var(--card-r);
+  padding:20px 22px;display:flex;align-items:center;gap:10px;overflow:hidden
+}
+.banner h3{margin:0;font-size:20px;font-weight:700;letter-spacing:-.01em}
+.banner p{margin:7px 0 0;font-size:13.5px;line-height:1.45;color:#6B4530;max-width:23ch}
+.banner .pill{margin-top:14px;background:#4A2A18;color:#fff;padding:11px 20px;border-radius:99px;font-size:14px;font-weight:600}
+.bell{font-size:56px;margin-left:auto;flex:none;transform:rotate(-8deg)}
+
+/* section head */
+.sec{display:flex;align-items:baseline;justify-content:space-between;margin:26px 0 12px}
+.sec h2{margin:0;font-size:21px;font-weight:800;letter-spacing:-.02em}
+.sec a{font-size:13.5px;font-weight:600;color:var(--ink-2);cursor:pointer}
+
+/* filters */
+.filters{display:flex;gap:7px;overflow-x:auto;padding-bottom:2px;scrollbar-width:none}
+.filters::-webkit-scrollbar{display:none}
+.chip{
+  flex:none;padding:8px 15px;border-radius:99px;background:rgba(255,255,255,.72);
+  font-size:13px;font-weight:600;color:var(--ink-2);display:flex;align-items:center;gap:6px
+}
+.chip i{width:7px;height:7px;border-radius:50%;display:block}
+.chip.on{background:var(--ink);color:#fff}
+
+/* tasks */
+.list{margin-top:14px;position:relative;padding-left:30px}
+.list:before{content:"";position:absolute;left:11px;top:14px;bottom:14px;border-left:1.5px dashed #D8C7BD}
+.task{
+  background:var(--surface);border-radius:18px;box-shadow:var(--shadow);
+  display:flex;align-items:center;gap:13px;padding:13px 15px;margin-bottom:11px;position:relative
+}
+.check{
+  position:absolute;left:-30px;top:50%;transform:translateY(-50%);
+  width:21px;height:21px;border-radius:50%;background:#fff;
+  border:1.5px solid #D8C7BD;display:grid;place-items:center;z-index:1
+}
+.check svg{width:11px;height:11px;opacity:0;stroke:#fff;stroke-width:3;fill:none}
+.task.done .check{background:var(--accent);border-color:var(--accent)}
+.task.done .check svg{opacity:1}
+.task.done .t-title{text-decoration:line-through;color:var(--muted)}
+.tile{width:44px;height:44px;border-radius:13px;flex:none;display:grid;place-items:center;font-size:21px}
+.t-body{min-width:0;flex:1}
+.t-title{font-size:15.5px;font-weight:600;letter-spacing:-.01em;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.t-meta{margin-top:3px;font-size:12.5px;color:var(--muted);font-weight:500;display:flex;align-items:center;gap:6px}
+.t-time{flex:none;padding-left:13px;border-left:1px solid #EFE6E0;text-align:center;color:var(--ink-2)}
+.t-time .h{font-size:13px;font-weight:600}
+.t-time .b{font-size:15px;line-height:1}
+.empty{padding:34px 20px;text-align:center;color:var(--ink-2)}
+.empty p{margin:0 0 4px;font-weight:600}
+.empty span{font-size:13.5px;color:var(--muted)}
+
+/* hours view */
+.hours{margin-top:14px}
+.hrow{display:grid;grid-template-columns:46px 1fr;gap:10px;min-height:52px}
+.hlab{font-size:12px;font-weight:600;color:var(--muted);padding-top:2px}
+.hslot{border-top:1px solid rgba(140,110,95,.14);padding:0 0 8px}
+.hchip{background:var(--surface);border-radius:13px;box-shadow:var(--shadow);padding:9px 12px;margin-top:4px;display:flex;gap:9px;align-items:center}
+.hchip .bar{width:4px;align-self:stretch;border-radius:3px;min-height:22px}
+.hchip .n{font-size:14px;font-weight:600}
+.hchip .m{font-size:12px;color:var(--muted)}
+
+/* month view */
+.month{margin-top:14px;background:rgba(255,255,255,.55);border-radius:var(--card-r);padding:14px}
+.mgrid{display:grid;grid-template-columns:repeat(7,1fr);gap:5px;margin-top:8px}
+.mcell{aspect-ratio:1/1;border-radius:12px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;font-size:13.5px;font-weight:600;color:var(--ink)}
+.mcell.out{color:#C5B4AB}
+.mcell.on{background:var(--ink);color:#fff}
+.mcell .dots i{width:3.5px;height:3.5px}
+.mcell .dots{position:static;display:flex;gap:2px;height:4px}
+
+/* view switch */
+.vswitch{display:flex;gap:4px;background:rgba(255,255,255,.6);border-radius:99px;padding:4px;margin-top:18px}
+.vswitch button{flex:1;padding:9px 0;border-radius:99px;font-size:13.5px;font-weight:600;color:var(--ink-2)}
+.vswitch button.on{background:var(--surface);color:var(--ink);box-shadow:var(--shadow)}
+
+/* fab */
+.fabs{position:fixed;right:calc(50% - 230px + 20px);bottom:calc(26px + var(--safe-b));display:flex;flex-direction:column;gap:12px;z-index:40}
+@media(max-width:499px){.fabs{right:20px}}
+.fab{width:60px;height:60px;border-radius:50%;background:#4A2A18;color:#fff;display:grid;place-items:center;box-shadow:0 10px 24px rgba(74,42,24,.32);transition:transform .15s ease}
+.fab:active{transform:scale(.93)}
+.fab.mic{width:52px;height:52px;background:var(--surface);color:var(--ink);margin-left:4px;box-shadow:0 8px 20px rgba(87,58,42,.18)}
+.fab.mic.rec{background:var(--accent);color:#fff;animation:pulse 1.3s infinite}
+@keyframes pulse{0%,100%{box-shadow:0 0 0 0 rgba(242,112,58,.5)}50%{box-shadow:0 0 0 14px rgba(242,112,58,0)}}
+.fab svg{width:24px;height:24px;stroke:currentColor;stroke-width:2.2;fill:none;stroke-linecap:round}
+
+/* sheet */
+.scrim{position:fixed;inset:0;background:rgba(42,27,18,.34);opacity:0;pointer-events:none;transition:opacity .22s;z-index:50}
+.scrim.on{opacity:1;pointer-events:auto}
+.sheet{
+  position:fixed;left:50%;transform:translate(-50%,110%);bottom:0;width:100%;max-width:460px;
+  background:#FBF5F1;border-radius:26px 26px 0 0;padding:8px 20px calc(24px + var(--safe-b));
+  z-index:60;transition:transform .3s cubic-bezier(.22,1,.36,1);max-height:92vh;overflow-y:auto
+}
+.sheet.on{transform:translate(-50%,0)}
+.grab{width:40px;height:4px;border-radius:99px;background:#E0D0C6;margin:6px auto 14px}
+.sheet h3{margin:0 0 16px;font-size:20px;font-weight:800;letter-spacing:-.02em}
+.field{margin-bottom:13px}
+.field label{display:block;font-size:12.5px;font-weight:600;color:var(--ink-2);margin-bottom:6px}
+.field input,.field textarea,.field select{
+  width:100%;padding:13px 15px;border-radius:14px;border:1.5px solid #EADDD5;background:#fff;
+  font-size:15px;outline:none;font-weight:500
+}
+.field input:focus,.field textarea:focus,.field select:focus{border-color:var(--accent)}
+.field textarea{resize:vertical;min-height:64px}
+.row{display:grid;grid-template-columns:1fr 1fr;gap:11px}
+.cats{display:flex;gap:8px}
+.cats button{flex:1;padding:11px 6px;border-radius:14px;background:#fff;border:1.5px solid #EADDD5;font-size:13px;font-weight:600;display:flex;flex-direction:column;align-items:center;gap:5px}
+.cats button i{width:9px;height:9px;border-radius:50%;display:block}
+.cats button.on{border-color:var(--ink);background:#fff}
+.save{width:100%;padding:16px;border-radius:99px;background:#4A2A18;color:#fff;font-size:15.5px;font-weight:700;margin-top:8px}
+.ghost{width:100%;padding:14px;border-radius:99px;font-size:14.5px;font-weight:600;color:var(--ink-2);margin-top:6px}
+.note{font-size:12.5px;color:var(--muted);line-height:1.5;margin:10px 0 0}
+.status{background:#FFF3E9;border-radius:14px;padding:13px 15px;font-size:13.5px;font-weight:600;color:#8A4A22;margin-bottom:13px;display:none}
+.status.on{display:block}
+
+/* toast */
+.toast{
+  position:fixed;left:50%;transform:translate(-50%,-24px);bottom:auto;top:18px;
+  background:var(--ink);color:#fff;padding:13px 20px;border-radius:99px;font-size:14px;font-weight:600;
+  z-index:90;opacity:0;pointer-events:none;transition:.25s;max-width:88%;text-align:center
+}
+.toast.on{opacity:1;transform:translate(-50%,0)}
+@media (prefers-reduced-motion:reduce){*{animation:none !important;transition:none !important}}
+:focus-visible{outline:2.5px solid var(--accent);outline-offset:2px}
+</style>
+</head>
+<body>
+
+<div class="app">
+  <div class="top">
+    <div>
+      <h1 class="hello" id="hello">Доброго ранку</h1>
+      <p class="today" id="todayLine"></p>
+    </div>
+    <button class="avatar" id="settingsBtn" title="Налаштування">🐯</button>
+  </div>
+
+  <div class="week">
+    <div class="wk-head">
+      <span class="wk-label" id="wkLabel"></span>
+      <div class="wk-nav">
+        <button id="prevWk" aria-label="Попередній тиждень"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M15 18l-6-6 6-6"/></svg></button>
+        <button id="nextWk" aria-label="Наступний тиждень"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M9 18l6-6-6-6"/></svg></button>
+      </div>
+    </div>
+    <div class="days" id="dowRow"></div>
+    <div class="days" id="dayRow" style="margin-top:8px"></div>
+  </div>
+
+  <div class="banner" id="banner">
+    <div>
+      <h3>Увімкніть сповіщення</h3>
+      <p>Щоб нагадування приходили вчасно, навіть коли вкладка згорнута.</p>
+      <button class="pill" id="enableNotif">Увімкнути</button>
+    </div>
+    <div class="bell">🔔</div>
+  </div>
+
+  <div class="vswitch">
+    <button data-view="list" class="on">Список</button>
+    <button data-view="hours">Години</button>
+    <button data-view="month">Місяць</button>
+  </div>
+
+  <div class="sec">
+    <h2 id="secTitle">Справи на день</h2>
+    <a id="clearDone">Прибрати виконані</a>
+  </div>
+
+  <div class="filters" id="filters"></div>
+
+  <div id="viewList"></div>
+  <div id="viewHours" class="hours" style="display:none"></div>
+  <div id="viewMonth" class="month" style="display:none"></div>
+</div>
+
+<div class="fabs">
+  <button class="fab mic" id="micBtn" title="Додати голосом">
+    <svg viewBox="0 0 24 24"><path d="M12 2a3 3 0 0 1 3 3v7a3 3 0 0 1-6 0V5a3 3 0 0 1 3-3z"/><path d="M19 11a7 7 0 0 1-14 0M12 18v4"/></svg>
+  </button>
+  <button class="fab" id="addBtn" title="Додати справу">
+    <svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>
+  </button>
+</div>
+
+<div class="scrim" id="scrim"></div>
+
+<!-- add / edit sheet -->
+<div class="sheet" id="sheet">
+  <div class="grab"></div>
+  <h3 id="sheetTitle">Нова справа</h3>
+  <div class="status" id="voiceStatus"></div>
+
+  <div class="field">
+    <label for="fTitle">Що зробити</label>
+    <input id="fTitle" placeholder="Зустріч з клієнтом" autocomplete="off">
+  </div>
+
+  <div class="row">
+    <div class="field">
+      <label for="fDate">Дата</label>
+      <input id="fDate" type="date">
+    </div>
+    <div class="field">
+      <label for="fTime">Час</label>
+      <input id="fTime" type="time">
+    </div>
+  </div>
+
+  <div class="field">
+    <label>Категорія</label>
+    <div class="cats" id="fCats"></div>
+  </div>
+
+  <div class="field">
+    <label for="fRemind">Нагадати</label>
+    <select id="fRemind">
+      <option value="">Без нагадування</option>
+      <option value="0">У момент початку</option>
+      <option value="10">За 10 хвилин</option>
+      <option value="30">За 30 хвилин</option>
+      <option value="60" selected>За годину</option>
+      <option value="1440">За добу</option>
+    </select>
+  </div>
+
+  <div class="field">
+    <label for="fNote">Нотатка</label>
+    <textarea id="fNote" placeholder="Деталі, адреса, посилання"></textarea>
+  </div>
+
+  <button class="save" id="saveTask">Зберегти</button>
+  <button class="ghost" id="deleteTask" style="display:none;color:#C0442A">Видалити справу</button>
+</div>
+
+<!-- settings sheet -->
+<div class="sheet" id="setSheet">
+  <div class="grab"></div>
+  <h3>Налаштування</h3>
+  <div class="field">
+    <label for="fName">Як до вас звертатись</label>
+    <input id="fName" placeholder="Андрій" autocomplete="off">
+  </div>
+  <div class="field">
+    <label for="fKey">Groq API key</label>
+    <input id="fKey" type="password" placeholder="gsk_..." autocomplete="off">
+    <p class="note">Потрібен для голосового вводу: <b>whisper-large-v3</b> розпізнає мову, <b>llama-3.3-70b-versatile</b> витягує з фрази назву, дату, час і категорію. Ключ зберігається лише у цьому браузері. Без ключа мікрофон перемкнеться на вбудоване розпізнавання Chrome.</p>
+  </div>
+  <button class="save" id="saveSet">Готово</button>
+  <button class="ghost" id="wipe">Стерти всі дані</button>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+/* ---------- storage ---------- */
+const mem = {};
+const store = {
+  get(k, d){ try{ const v = localStorage.getItem(k); return v===null ? (k in mem ? mem[k] : d) : JSON.parse(v); }catch(e){ return k in mem ? mem[k] : d; } },
+  set(k, v){ mem[k]=v; try{ localStorage.setItem(k, JSON.stringify(v)); }catch(e){} }
+};
+
+/* ---------- model ---------- */
+const CATS = {
+  work:    { label:'Робота',   color:'var(--work)',    hex:'#F7B98E', emoji:'💼' },
+  private: { label:'Приватні', color:'var(--private)', hex:'#B8D3A4', emoji:'🌿' },
+  company: { label:'Фірма',    color:'var(--company)', hex:'#D9B4E0', emoji:'🏢' }
+};
+let tasks   = store.get('planner.tasks', seed());
+let profile = store.get('planner.profile', { name:'', key:'' });
+let cursor  = new Date();            // selected day
+let filter  = 'all';
+let view    = 'list';
+let editing = null;
+
+function save(){ store.set('planner.tasks', tasks); scheduleAll(); }
+function uid(){ return Math.random().toString(36).slice(2,10); }
+function iso(d){ const x=new Date(d); return new Date(x.getTime()-x.getTimezoneOffset()*6e4).toISOString().slice(0,10); }
+function seed(){
+  const t = iso(new Date());
+  return [
+    { id:uid(), title:'Дзвінок з Wildix',        date:t, time:'10:00', category:'work',    remind:30,   done:false, note:'' },
+    { id:uid(), title:'Правки на сайті K&K',     date:t, time:'13:30', category:'company', remind:60,   done:false, note:'Секція контактів' },
+    { id:uid(), title:'Забрати малого з садка',  date:t, time:'17:00', category:'private', remind:30,   done:false, note:'' },
+    { id:uid(), title:'Виставити рахунок',       date:t, time:'',      category:'company', remind:null, done:true,  note:'' }
+  ];
+}
+
+/* ---------- dates ---------- */
+const DOW = ['Пн','Вт','Ср','Чт','Пт','Сб','Нд'];
+const MONTHS = ['січня','лютого','березня','квітня','травня','червня','липня','серпня','вересня','жовтня','листопада','грудня'];
+const MONTHS_N = ['Січень','Лютий','Березень','Квітень','Травень','Червень','Липень','Серпень','Вересень','Жовтень','Листопад','Грудень'];
+function startOfWeek(d){ const x=new Date(d); const k=(x.getDay()+6)%7; x.setDate(x.getDate()-k); x.setHours(0,0,0,0); return x; }
+function addDays(d,n){ const x=new Date(d); x.setDate(x.getDate()+n); return x; }
+function sameDay(a,b){ return iso(a)===iso(b); }
+
+/* ---------- render ---------- */
+function greeting(){
+  const h = new Date().getHours();
+  const g = h<5?'Доброї ночі' : h<12?'Доброго ранку' : h<18?'Доброго дня' : 'Доброго вечора';
+  return profile.name ? g+', '+profile.name : g;
+}
+
+function renderHeader(){
+  document.getElementById('hello').textContent = greeting();
+  const n = new Date();
+  document.getElementById('todayLine').textContent =
+    DOW[(n.getDay()+6)%7] + ', ' + n.getDate() + ' ' + MONTHS[n.getMonth()] + ' ' + n.getFullYear();
+}
+
+function renderWeek(){
+  const s = startOfWeek(cursor);
+  document.getElementById('wkLabel').textContent = MONTHS_N[cursor.getMonth()] + ' ' + cursor.getFullYear();
+  const dowRow = document.getElementById('dowRow');
+  const dayRow = document.getElementById('dayRow');
+  dowRow.innerHTML=''; dayRow.innerHTML='';
+  for(let i=0;i<7;i++){
+    const d = addDays(s,i);
+    const on = sameDay(d, cursor);
+    const l = document.createElement('div');
+    l.className = 'dow'+(on?' on':''); l.textContent = DOW[i];
+    dowRow.appendChild(l);
+
+    const b = document.createElement('button');
+    b.className = 'dnum'+(on?' on':'')+(sameDay(d,new Date())?' today-ring':'');
+    b.innerHTML = d.getDate();
+    const cats = [...new Set(tasks.filter(t=>t.date===iso(d) && !t.done).map(t=>t.category))].slice(0,3);
+    if(cats.length){
+      const dots = document.createElement('div'); dots.className='dots';
+      cats.forEach(c=>{ const i2=document.createElement('i'); i2.style.background=CATS[c].hex; dots.appendChild(i2); });
+      b.appendChild(dots);
+    }
+    b.onclick = ()=>{ cursor = d; renderAll(); };
+    dayRow.appendChild(b);
+  }
+}
+
+function renderFilters(){
+  const box = document.getElementById('filters');
+  box.innerHTML='';
+  const mk = (key,label,hex)=>{
+    const b=document.createElement('button');
+    b.className='chip'+(filter===key?' on':'');
+    b.innerHTML = (hex?`<i style="background:${hex}"></i>`:'') + label;
+    b.onclick=()=>{ filter=key; renderAll(); };
+    box.appendChild(b);
+  };
+  mk('all','Усі',null);
+  Object.entries(CATS).forEach(([k,c])=>mk(k,c.label,c.hex));
+}
+
+function dayTasks(d){
+  return tasks
+    .filter(t => t.date===iso(d) && (filter==='all'||t.category===filter))
+    .sort((a,b)=> (a.time||'99:99').localeCompare(b.time||'99:99'));
+}
+
+function renderList(){
+  const box = document.getElementById('viewList');
+  const items = dayTasks(cursor);
+  if(!items.length){
+    box.innerHTML = `<div class="empty"><p>На цей день нічого не заплановано</p><span>Натисніть + або продиктуйте справу голосом</span></div>`;
+    return;
+  }
+  box.innerHTML = '<div class="list"></div>';
+  const list = box.firstChild;
+  items.forEach(t=>{
+    const c = CATS[t.category];
+    const el = document.createElement('div');
+    el.className = 'task'+(t.done?' done':'');
+    el.innerHTML = `
+      <button class="check" aria-label="Виконано"><svg viewBox="0 0 24 24"><path d="M4 12l6 6L20 6"/></svg></button>
+      <div class="tile" style="background:${c.hex}33">${c.emoji}</div>
+      <div class="t-body">
+        <div class="t-title">${esc(t.title)}</div>
+        <div class="t-meta">${c.label}${t.remind!==null&&t.remind!==undefined&&t.time?' · 🔔 '+remindLabel(t.remind):''}${t.note?' · '+esc(t.note.slice(0,28)):''}</div>
+      </div>
+      ${t.time?`<div class="t-time"><div class="b">${t.time}</div></div>`:''}`;
+    el.querySelector('.check').onclick = e=>{ e.stopPropagation(); t.done=!t.done; save(); renderAll(); };
+    el.onclick = ()=>openSheet(t);
+    list.appendChild(el);
+  });
+}
+
+function renderHours(){
+  const box = document.getElementById('viewHours');
+  const items = dayTasks(cursor).filter(t=>t.time);
+  const untimed = dayTasks(cursor).filter(t=>!t.time);
+  let from = 7, to = 22;
+  items.forEach(t=>{ const h=+t.time.slice(0,2); from=Math.min(from,h); to=Math.max(to,h+1); });
+  let html = '';
+  for(let h=from;h<=to;h++){
+    const at = items.filter(t=>+t.time.slice(0,2)===h);
+    html += `<div class="hrow"><div class="hlab">${String(h).padStart(2,'0')}:00</div><div class="hslot">` +
+      at.map(t=>{ const c=CATS[t.category]; return `<div class="hchip" data-id="${t.id}"><span class="bar" style="background:${c.hex}"></span><span><span class="n">${esc(t.title)}</span><br><span class="m">${t.time} · ${c.label}</span></span></div>`; }).join('') +
+      `</div></div>`;
+  }
+  if(untimed.length){
+    html += `<div class="hrow"><div class="hlab">Будь-коли</div><div class="hslot">` +
+      untimed.map(t=>{ const c=CATS[t.category]; return `<div class="hchip" data-id="${t.id}"><span class="bar" style="background:${c.hex}"></span><span class="n">${esc(t.title)}</span></div>`; }).join('') + `</div></div>`;
+  }
+  box.innerHTML = html;
+  box.querySelectorAll('.hchip').forEach(el=>el.onclick=()=>openSheet(tasks.find(t=>t.id===el.dataset.id)));
+}
+
+function renderMonth(){
+  const box = document.getElementById('viewMonth');
+  const first = new Date(cursor.getFullYear(), cursor.getMonth(), 1);
+  const start = startOfWeek(first);
+  let html = `<div class="days">${DOW.map(d=>`<div class="dow">${d}</div>`).join('')}</div><div class="mgrid">`;
+  for(let i=0;i<42;i++){
+    const d = addDays(start,i);
+    const out = d.getMonth()!==cursor.getMonth();
+    const on = sameDay(d,cursor);
+    const cats = [...new Set(tasks.filter(t=>t.date===iso(d)&&!t.done&&(filter==='all'||t.category===filter)).map(t=>t.category))].slice(0,3);
+    html += `<button class="mcell${out?' out':''}${on?' on':''}" data-d="${iso(d)}">${d.getDate()}
+      <span class="dots">${cats.map(c=>`<i style="background:${on?'#fff':CATS[c].hex}"></i>`).join('')}</span></button>`;
+    if(i===34 && addDays(start,35).getMonth()!==cursor.getMonth()) break;
+  }
+  box.innerHTML = html + '</div>';
+  box.querySelectorAll('.mcell').forEach(el=>el.onclick=()=>{ cursor=new Date(el.dataset.d+'T12:00'); view='list'; syncSwitch(); renderAll(); });
+}
+
+function renderAll(){
+  renderHeader(); renderWeek(); renderFilters();
+  const t = sameDay(cursor,new Date()) ? 'Справи на сьогодні'
+          : sameDay(cursor,addDays(new Date(),1)) ? 'Справи на завтра'
+          : 'Справи на ' + cursor.getDate() + ' ' + MONTHS[cursor.getMonth()];
+  document.getElementById('secTitle').textContent = t;
+  document.getElementById('viewList').style.display  = view==='list' ?'':'none';
+  document.getElementById('viewHours').style.display = view==='hours'?'':'none';
+  document.getElementById('viewMonth').style.display = view==='month'?'':'none';
+  if(view==='list') renderList(); else if(view==='hours') renderHours(); else renderMonth();
+  const b = document.getElementById('banner');
+  b.style.display = ('Notification' in window && Notification.permission==='granted') ? 'none' : 'flex';
+}
+
+function esc(s){ return String(s).replace(/[&<>"]/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+function remindLabel(m){ return m===0?'вчасно':m<60?`за ${m} хв`:m===1440?'за добу':`за ${m/60} год`; }
+
+/* ---------- sheet ---------- */
+const scrim=document.getElementById('scrim'), sheet=document.getElementById('sheet'), setSheet=document.getElementById('setSheet');
+let cat = 'work';
+function renderCats(){
+  const box=document.getElementById('fCats'); box.innerHTML='';
+  Object.entries(CATS).forEach(([k,c])=>{
+    const b=document.createElement('button');
+    b.className = cat===k?'on':''; b.innerHTML=`<i style="background:${c.hex}"></i>${c.label}`;
+    b.onclick=()=>{ cat=k; renderCats(); };
+    box.appendChild(b);
+  });
+}
+function openSheet(t){
+  editing = t || null;
+  document.getElementById('sheetTitle').textContent = t?'Редагувати справу':'Нова справа';
+  document.getElementById('fTitle').value = t?t.title:'';
+  document.getElementById('fDate').value  = t?t.date:iso(cursor);
+  document.getElementById('fTime').value  = t?(t.time||''):'';
+  document.getElementById('fNote').value  = t?(t.note||''):'';
+  document.getElementById('fRemind').value= t?(t.remind===null||t.remind===undefined?'':String(t.remind)):'60';
+  document.getElementById('deleteTask').style.display = t?'block':'none';
+  document.getElementById('voiceStatus').classList.remove('on');
+  cat = t?t.category:'work'; renderCats();
+  scrim.classList.add('on'); sheet.classList.add('on');
+}
+function closeSheets(){ scrim.classList.remove('on'); sheet.classList.remove('on'); setSheet.classList.remove('on'); }
+scrim.onclick = closeSheets;
+
+document.getElementById('addBtn').onclick = ()=>openSheet(null);
+document.getElementById('saveTask').onclick = ()=>{
+  const title = document.getElementById('fTitle').value.trim();
+  if(!title){ toast('Впишіть, що треба зробити'); return; }
+  const r = document.getElementById('fRemind').value;
+  const data = {
+    title,
+    date: document.getElementById('fDate').value || iso(new Date()),
+    time: document.getElementById('fTime').value,
+    note: document.getElementById('fNote').value.trim(),
+    remind: r===''?null:+r,
+    category: cat
+  };
+  if(editing){ Object.assign(editing, data); }
+  else { tasks.push({ id:uid(), done:false, ...data }); }
+  cursor = new Date(data.date+'T12:00');
+  save(); closeSheets(); renderAll();
+  toast(editing?'Збережено':'Справу додано');
+};
+document.getElementById('deleteTask').onclick = ()=>{
+  tasks = tasks.filter(t=>t.id!==editing.id); save(); closeSheets(); renderAll(); toast('Видалено');
+};
+document.getElementById('clearDone').onclick = ()=>{
+  const n = tasks.filter(t=>t.done && t.date===iso(cursor)).length;
+  if(!n){ toast('Виконаних справ немає'); return; }
+  tasks = tasks.filter(t=>!(t.done && t.date===iso(cursor)));
+  save(); renderAll(); toast('Прибрано: '+n);
+};
+
+/* settings */
+document.getElementById('settingsBtn').onclick = ()=>{
+  document.getElementById('fName').value = profile.name||'';
+  document.getElementById('fKey').value  = profile.key||'';
+  scrim.classList.add('on'); setSheet.classList.add('on');
+};
+document.getElementById('saveSet').onclick = ()=>{
+  profile.name = document.getElementById('fName').value.trim();
+  profile.key  = document.getElementById('fKey').value.trim();
+  store.set('planner.profile', profile); closeSheets(); renderAll(); toast('Збережено');
+};
+document.getElementById('wipe').onclick = ()=>{
+  if(!confirm('Стерти всі справи й налаштування?')) return;
+  tasks=[]; profile={name:'',key:''};
+  store.set('planner.tasks',tasks); store.set('planner.profile',profile);
+  closeSheets(); renderAll();
+};
+
+/* view switch */
+function syncSwitch(){ document.querySelectorAll('.vswitch button').forEach(b=>b.classList.toggle('on', b.dataset.view===view)); }
+document.querySelectorAll('.vswitch button').forEach(b=>b.onclick=()=>{ view=b.dataset.view; syncSwitch(); renderAll(); });
+document.getElementById('prevWk').onclick = ()=>{ cursor = addDays(cursor, view==='month'?-30:-7); renderAll(); };
+document.getElementById('nextWk').onclick = ()=>{ cursor = addDays(cursor, view==='month'? 30: 7); renderAll(); };
+
+/* ---------- notifications ---------- */
+document.getElementById('enableNotif').onclick = async ()=>{
+  if(!('Notification' in window)){ toast('Браузер не підтримує сповіщення'); return; }
+  const p = await Notification.requestPermission();
+  toast(p==='granted'?'Сповіщення увімкнено':'Дозвіл не надано');
+  renderAll(); scheduleAll();
+};
+let timers = [];
+function fireAt(t){
+  if(!t.time || t.remind===null || t.remind===undefined || t.done) return null;
+  return new Date(t.date+'T'+t.time+':00').getTime() - t.remind*60000;
+}
+function scheduleAll(){
+  timers.forEach(clearTimeout); timers=[];
+  const now = Date.now();
+  tasks.forEach(t=>{
+    const at = fireAt(t);
+    if(at===null) return;
+    const delay = at-now;
+    if(delay>0 && delay < 6*3600*1000){
+      timers.push(setTimeout(()=>notify(t), delay));
+    }
+  });
+}
+function notify(t){
+  const body = (t.time?t.time+' · ':'') + CATS[t.category].label + (t.note?' · '+t.note:'');
+  if('Notification' in window && Notification.permission==='granted'){
+    new Notification(t.title, { body, tag:t.id, icon:'data:image/svg+xml,'+encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><circle cx="32" cy="32" r="32" fill="%23F2703A"/></svg>') });
+  } else {
+    toast('🔔 ' + t.title);
+  }
+}
+setInterval(scheduleAll, 5*60*1000);
+
+/* ---------- voice ---------- */
+const micBtn = document.getElementById('micBtn');
+let recorder = null, chunks = [], recognizer = null;
+
+micBtn.onclick = ()=>{
+  if(recorder && recorder.state==='recording'){ recorder.stop(); return; }
+  if(recognizer){ recognizer.stop(); recognizer=null; micBtn.classList.remove('rec'); return; }
+  profile.key ? startGroq() : startWebSpeech();
+};
+
+async function startGroq(){
+  try{
+    const stream = await navigator.mediaDevices.getUserMedia({ audio:true });
+    chunks = [];
+    recorder = new MediaRecorder(stream);
+    recorder.ondataavailable = e=>chunks.push(e.data);
+    recorder.onstop = async ()=>{
+      stream.getTracks().forEach(t=>t.stop());
+      micBtn.classList.remove('rec');
+      const blob = new Blob(chunks, { type: recorder.mimeType || 'audio/webm' });
+      recorder = null;
+      await processAudio(blob);
+    };
+    recorder.start();
+    micBtn.classList.add('rec');
+    toast('Говоріть… натисніть ще раз, щоб зупинити');
+  }catch(e){ toast('Немає доступу до мікрофона'); }
+}
+
+async function processAudio(blob){
+  toast('Розпізнаю…');
+  try{
+    const fd = new FormData();
+    fd.append('file', blob, 'audio.webm');
+    fd.append('model', 'whisper-large-v3');
+    fd.append('language', 'uk');
+    fd.append('response_format', 'json');
+    const r = await fetch('https://api.groq.com/openai/v1/audio/transcriptions', {
+      method:'POST', headers:{ Authorization:'Bearer '+profile.key }, body: fd
+    });
+    if(!r.ok) throw new Error(await r.text());
+    const { text } = await r.json();
+    if(!text || !text.trim()){ toast('Нічого не почув'); return; }
+    await parseWithLlama(text.trim());
+  }catch(e){
+    console.error(e);
+    toast('Groq не відповів — перевірте ключ або CORS');
+  }
+}
+
+const SYS = `Ти перетворюєш українську фразу на структуру завдання для планера.
+Поточна дата-час користувача: {NOW} (часовий пояс {TZ}, тиждень починається з понеділка).
+Поверни ЛИШЕ JSON без пояснень і без markdown:
+{"title":"коротка назва справи","date":"YYYY-MM-DD","time":"HH:MM або пустий рядок","category":"work|private|company","remind":число хвилин до початку або null,"note":"деталі або пустий рядок"}
+Правила:
+- category: work — робота, клієнти, дзвінки, зустрічі, дедлайни; company — власна фірма, бухгалтерія, рахунки, податки, ZUS, документи; private — сімʼя, дім, здоровʼя, побут, відпочинок.
+- "завтра", "у понеділок", "через тиждень" рахуй від поточної дати.
+- Якщо час не названо — time пустий рядок, remind null.
+- Якщо час названо, а нагадування ні — remind 60.
+- title без слів "нагадай", "постав", "додай".`;
+
+async function parseWithLlama(text){
+  toast('Розбираю: ' + text.slice(0,42) + (text.length>42?'…':''));
+  const now = new Date();
+  const sys = SYS.replace('{NOW}', now.toString()).replace('{TZ}', Intl.DateTimeFormat().resolvedOptions().timeZone);
+  try{
+    const r = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+      method:'POST',
+      headers:{ 'Content-Type':'application/json', Authorization:'Bearer '+profile.key },
+      body: JSON.stringify({
+        model:'llama-3.3-70b-versatile',
+        temperature:0.1,
+        response_format:{ type:'json_object' },
+        messages:[{ role:'system', content:sys }, { role:'user', content:text }]
+      })
+    });
+    if(!r.ok) throw new Error(await r.text());
+    const d = await r.json();
+    const parsed = JSON.parse(d.choices[0].message.content.replace(/```json|```/g,'').trim());
+    prefill(parsed, text);
+  }catch(e){
+    console.error(e);
+    prefill(localParse(text), text);
+  }
+}
+
+/* fallback: Chrome speech recognition + локальний розбір */
+function startWebSpeech(){
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if(!SR){ toast('Додайте Groq ключ у налаштуваннях'); return; }
+  recognizer = new SR();
+  recognizer.lang='uk-UA'; recognizer.interimResults=false; recognizer.maxAlternatives=1;
+  recognizer.onresult = e=>{ const text=e.results[0][0].transcript; recognizer=null; micBtn.classList.remove('rec'); prefill(localParse(text), text); };
+  recognizer.onerror = ()=>{ recognizer=null; micBtn.classList.remove('rec'); toast('Не вдалося розпізнати'); };
+  recognizer.onend  = ()=>{ recognizer=null; micBtn.classList.remove('rec'); };
+  recognizer.start(); micBtn.classList.add('rec');
+  toast('Говоріть…');
+}
+
+function localParse(text){
+  const low = text.toLowerCase();
+  let d = new Date();
+  if(/післязавтра/.test(low)) d = addDays(d,2);
+  else if(/завтра/.test(low)) d = addDays(d,1);
+  const wd = ['понеділ','вівтор','серед','четвер','пʼятниц|п\'ятниц|пятниц','субот','неділ'];
+  wd.forEach((w,i)=>{ if(new RegExp(w).test(low)){ let k=(i-((d.getDay()+6)%7)+7)%7; d=addDays(d, k===0?7:k); } });
+  const m = low.match(/(?:о|на|в)\s*(\d{1,2})(?:[:.](\d{2}))?\s*(?:год|:00)?/);
+  let time = '';
+  if(m){ let h=+m[1]; const mi=m[2]||'00'; if(/вечор|ввечері/.test(low)&&h<12) h+=12; if(h<=23) time = String(h).padStart(2,'0')+':'+mi; }
+  let category = 'private';
+  if(/клієнт|зустріч|дзвінок|дедлайн|проєкт|проект|сайт|робот/.test(low)) category='work';
+  if(/рахунок|податк|бухгалт|zus|фірм|документ|фактур/.test(low)) category='company';
+  const title = text.replace(/^(нагадай|постав|додай|треба|запиши)\s*(мені)?\s*/i,'').replace(/\s+(завтра|післязавтра|сьогодні).*$/i,'').trim();
+  return { title: title || text, date: iso(d), time, category, remind: time?60:null, note:'' };
+}
+
+function prefill(p, raw){
+  openSheet(null);
+  document.getElementById('fTitle').value = p.title || raw;
+  document.getElementById('fDate').value  = p.date || iso(new Date());
+  document.getElementById('fTime').value  = p.time || '';
+  document.getElementById('fNote').value  = p.note || '';
+  document.getElementById('fRemind').value = (p.remind===null||p.remind===undefined) ? '' : String(p.remind);
+  cat = CATS[p.category] ? p.category : 'private'; renderCats();
+  const s = document.getElementById('voiceStatus');
+  s.textContent = '🎤 «' + raw + '» — перевірте й збережіть';
+  s.classList.add('on');
+}
+
+/* ---------- toast ---------- */
+let tt;
+function toast(msg){
+  const el=document.getElementById('toast');
+  el.textContent=msg; el.classList.add('on');
+  clearTimeout(tt); tt=setTimeout(()=>el.classList.remove('on'), 2600);
+}
+
+/* ---------- go ---------- */
+renderCats(); renderAll(); scheduleAll();
+document.addEventListener('keydown', e=>{ if(e.key==='Escape') closeSheets(); });
+</script>
+</body>
+</html>
