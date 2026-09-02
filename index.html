@@ -170,6 +170,10 @@ input,select,textarea{font:inherit;color:inherit}
   z-index:60;transition:transform .3s cubic-bezier(.22,1,.36,1);max-height:92vh;overflow-y:auto
 }
 .sheet.on{transform:translate(-50%,0)}
+.sheet-x{position:absolute;right:18px;top:18px;width:34px;height:34px;border-radius:50%;
+  background:var(--field);border:1.5px solid var(--line);display:grid;place-items:center;color:var(--ink-2);z-index:2}
+.sheet-x:active{transform:scale(.92)}
+.sheet-x svg{width:15px;height:15px;stroke:currentColor;stroke-width:2.6;fill:none;stroke-linecap:round}
 .grab{width:40px;height:4px;border-radius:99px;background:var(--line);margin:6px auto 14px}
 .sheet h3{margin:0 0 16px;font-size:20px;font-weight:800;letter-spacing:-.02em}
 .field{margin-bottom:13px}
@@ -307,6 +311,7 @@ input,select,textarea{font:inherit;color:inherit}
 
 <!-- add / edit sheet -->
 <div class="sheet" id="sheet">
+  <button class="sheet-x" aria-label="Закрити"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
   <div class="grab"></div>
   <h3 id="sheetTitle">Нова справа</h3>
   <div class="status" id="voiceStatus"></div>
@@ -355,6 +360,7 @@ input,select,textarea{font:inherit;color:inherit}
 
 <!-- settings sheet -->
 <div class="sheet" id="setSheet">
+  <button class="sheet-x" aria-label="Закрити"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
   <div class="grab"></div>
   <h3>Налаштування</h3>
   <div class="field">
@@ -623,6 +629,7 @@ function openSheet(t){
 }
 function closeSheets(){ scrim.classList.remove('on'); sheet.classList.remove('on'); setSheet.classList.remove('on'); }
 scrim.onclick = closeSheets;
+document.querySelectorAll('.sheet-x').forEach(b=>{ b.onclick = closeSheets; });
 
 document.getElementById('addBtn').onclick = ()=>openSheet(null);
 document.getElementById('saveTask').onclick = ()=>{
@@ -795,15 +802,28 @@ async function processAudio(blob){
 }
 
 const SYS = `Ти перетворюєш українську фразу на структуру завдання для планера.
-Поточна дата-час користувача: {NOW} (часовий пояс {TZ}, тиждень починається з понеділка).
+Поточний момент користувача: {NOW} (часовий пояс {TZ}, тиждень починається з понеділка).
 Поверни ЛИШЕ JSON без пояснень і без markdown:
 {"title":"коротка назва справи","date":"YYYY-MM-DD","time":"HH:MM або пустий рядок","category":"work|private|company","remind":число хвилин до початку або null,"note":"деталі або пустий рядок"}
-Правила:
-- category: work — робота, клієнти, дзвінки, зустрічі, дедлайни; company — власна фірма, бухгалтерія, рахунки, податки, ZUS, документи; private — сімʼя, дім, здоровʼя, побут, відпочинок.
-- "завтра", "у понеділок", "через тиждень" рахуй від поточної дати.
-- Якщо час не названо — time пустий рядок, remind null.
-- Якщо час названо, а нагадування ні — remind 60.
-- title без слів "нагадай", "постав", "додай".`;
+
+Як рахувати дату й час — рахуй завжди від поточного моменту вище:
+- "сьогодні" — сьогоднішня дата; "завтра" — +1 день; "післязавтра" — +2 дні.
+- "через годину", "за годину", "через 20 хвилин", "через 3 години" — додай цей інтервал до поточного часу і запиши отриманий date і time.
+- "у понеділок", "у пʼятницю" — найближчий такий день попереду; якщо названо сьогоднішній день тижня, це наступний тиждень.
+- "через тиждень" — +7 днів; "наступного місяця" — +1 місяць.
+- Конкретна дата: "15 вересня", "15.09", "15 числа" — цього року, а якщо дата вже минула, то наступного.
+- Час: "о 14:30", "о пів на третю" (14:30), "о третій" (15:00 удень), "вранці" (09:00), "вдень" (13:00), "ввечері" (19:00), "вночі" (22:00). "о третій ночі" — 03:00.
+- Якщо названо лише час без дня — сьогодні, а якщо цей час уже минув — завтра.
+- Якщо про час і день не сказано нічого — date це сьогодні, time пустий рядок, remind null. Не вигадуй час.
+
+remind:
+- Якщо явно сказано "нагадай за 15 хвилин", "попередь за день" — стільки хвилин (день = 1440).
+- Якщо час названо, а про нагадування не сказано — 60.
+- Якщо time пустий — null.
+
+category: work — робота, клієнти, дзвінки, зустрічі, дедлайни, проєкти; company — власна фірма, бухгалтерія, рахунки, податки, ZUS, документи; private — сімʼя, дім, здоровʼя, побут, покупки, відпочинок.
+
+title — коротко й без службових слів "нагадай", "постав", "додай", "треба", "запиши". Деталі (адреса, з ким, навіщо) винеси в note.`;
 
 async function parseWithLlama(text){
   toast('Розбираю: ' + text.slice(0,42) + (text.length>42?'…':''));
@@ -844,20 +864,95 @@ function startWebSpeech(){
 }
 
 function localParse(text){
-  const low = text.toLowerCase();
-  let d = new Date();
-  if(/післязавтра/.test(low)) d = addDays(d,2);
-  else if(/завтра/.test(low)) d = addDays(d,1);
-  const wd = ['понеділ','вівтор','серед','четвер','пʼятниц|п\'ятниц|пятниц','субот','неділ'];
-  wd.forEach((w,i)=>{ if(new RegExp(w).test(low)){ let k=(i-((d.getDay()+6)%7)+7)%7; d=addDays(d, k===0?7:k); } });
-  const m = low.match(/(?:о|на|в)\s*(\d{1,2})(?:[:.](\d{2}))?\s*(?:год|:00)?/);
-  let time = '';
-  if(m){ let h=+m[1]; const mi=m[2]||'00'; if(/вечор|ввечері/.test(low)&&h<12) h+=12; if(h<=23) time = String(h).padStart(2,'0')+':'+mi; }
+  const low = ' ' + text.toLowerCase().replace(/[,;]/g,' ') + ' ';
+  const now = new Date();
+  let d = new Date(now), time = '', remind = null, explicitTime = false;
+
+  const MON = ['січн','лют','берез','квіт','трав','черв','лип','серп','вересн','жовтн','листопад','грудн'];
+  const WD  = ['понеділ','вівтор','серед','четвер','пʼятниц|пятниц|п\'ятниц','субот','неділ'];
+  const num = w => { const m = low.match(w); return m ? parseInt(m[1],10) : null; };
+
+  // 1. відносний зсув: "через годину", "за 20 хвилин"
+  const relH = num(/(?:через|за)\s+(\d+)\s*год/) ?? (/(?:через|за)\s+год/.test(low) ? 1 : null);
+  const relM = num(/(?:через|за)\s+(\d+)\s*(?:хв|хвилин)/);
+  if(relH !== null || relM !== null){
+    d = new Date(now.getTime() + (relH||0)*3600000 + (relM||0)*60000);
+    time = String(d.getHours()).padStart(2,'0') + ':' + String(d.getMinutes()).padStart(2,'0');
+    explicitTime = true;
+  }
+
+  // 2. день
+  if(!explicitTime){
+    if(/післязавтра/.test(low))      d = addDays(now, 2);
+    else if(/завтра/.test(low))      d = addDays(now, 1);
+    else if(/через\s+тиждень/.test(low)) d = addDays(now, 7);
+    else if(/сьогодні/.test(low))    d = new Date(now);
+    else {
+      WD.forEach((w,i)=>{
+        if(new RegExp(w).test(low)){
+          let k = (i - ((now.getDay()+6)%7) + 7) % 7;
+          d = addDays(now, k === 0 ? 7 : k);
+        }
+      });
+      // "15 вересня", "15.09"
+      const md = low.match(/(\d{1,2})\s*(?:\.|\/)\s*(\d{1,2})/);
+      const mw = low.match(new RegExp('(\\d{1,2})\\s*(?:' + MON.join('|') + ')'));
+      if(mw){
+        const day = +mw[1];
+        const mi = MON.findIndex(m => new RegExp('\\d{1,2}\\s*' + m).test(low));
+        if(mi >= 0){ d = new Date(now.getFullYear(), mi, day, 12); if(d < now) d.setFullYear(d.getFullYear()+1); }
+      } else if(md){
+        d = new Date(now.getFullYear(), +md[2]-1, +md[1], 12);
+        if(d < now) d.setFullYear(d.getFullYear()+1);
+      }
+    }
+  }
+
+  // 3. час
+  if(!explicitTime){
+    const t = low.match(/(?:о|об|на|в)\s*(\d{1,2})(?:[:.](\d{2}))?\s*(?:год)?/);
+    if(t){
+      let h = +t[1]; const mi = t[2] || '00';
+      if(/вечор|ввечері|вечері/.test(low) && h < 12) h += 12;
+      if(/дня|вдень/.test(low) && h < 8) h += 12;
+      if(/ночі|вночі/.test(low) && h === 12) h = 0;
+      if(h <= 23) { time = String(h).padStart(2,'0') + ':' + mi; explicitTime = true; }
+    } else if(/вранці|зранку/.test(low))  { time = '09:00'; explicitTime = true; }
+    else if(/ввечері|увечері/.test(low))  { time = '19:00'; explicitTime = true; }
+    else if(/вдень/.test(low))            { time = '13:00'; explicitTime = true; }
+
+    // час названо без дня і вже минув → переносимо на завтра
+    if(explicitTime && !/завтра|післязавтра|сьогодні|через/.test(low) && iso(d) === iso(now)){
+      const [hh,mm] = time.split(':').map(Number);
+      if(hh*60+mm < now.getHours()*60 + now.getMinutes()) d = addDays(now, 1);
+    }
+  }
+
+  // 4. нагадування
+  const rh = num(/нагада\w*\s+за\s+(\d+)\s*год/), rm = num(/нагада\w*\s+за\s+(\d+)\s*(?:хв|хвилин)/);
+  if(rm !== null) remind = rm;
+  else if(rh !== null) remind = rh * 60;
+  else if(/за\s+добу|за\s+день/.test(low)) remind = 1440;
+  else if(time) remind = 60;
+
+  // 5. категорія
   let category = 'private';
-  if(/клієнт|зустріч|дзвінок|дедлайн|проєкт|проект|сайт|робот/.test(low)) category='work';
-  if(/рахунок|податк|бухгалт|zus|фірм|документ|фактур/.test(low)) category='company';
-  const title = text.replace(/^(нагадай|постав|додай|треба|запиши)\s*(мені)?\s*/i,'').replace(/\s+(завтра|післязавтра|сьогодні).*$/i,'').trim();
-  return { title: title || text, date: iso(d), time, category, remind: time?60:null, note:'' };
+  if(/клієнт|зустріч|дзвінок|дедлайн|проєкт|проект|сайт|робот|нарад|презентац/.test(low)) category = 'work';
+  if(/рахунок|податк|бухгалт|zus|фірм|документ|фактур|звіт/.test(low)) category = 'company';
+
+  // 6. назва
+  const W = '[а-яіїєґА-ЯІЇЄҐ]';   // \\w у JS не бачить кирилиці, тому клас вручну
+  const title = text
+    .replace(new RegExp('^(нагадай|постав|додай|треба|запиши|зроби)\\s*(мені)?\\s*','i'),'')
+    .replace(new RegExp('\\s*нагада'+W+'*\\s+за\\s+\\d*\\s*(год'+W+'*|хв'+W+'*|добу|день)','gi'),'')
+    .replace(new RegExp('\\s*(через|за)\\s+\\d*\\s*(год'+W+'*|хвилин'+W+'*|хв)','gi'),'')
+    .replace(new RegExp('\\s*(сьогодні|завтра|післязавтра|зранку|вранці|ввечері|увечері|вдень)','gi'),'')
+    .replace(new RegExp('\\s*(у|в)?\\s*(понеділок|вівторок|середу|четвер|пʼятницю|пятницю|суботу|неділю)','gi'),'')
+    .replace(new RegExp('\\s*(о|об)\\s+\\d{1,2}([:.]\\d{2})?\\s*(год'+W+'*)?','gi'),'')
+    .replace(new RegExp('\\s*\\d{1,2}\\s*(січн|лют|берез|квіт|трав|черв|лип|серп|вересн|жовтн|листопад|грудн)'+W+'*','gi'),'')
+    .replace(/\s{2,}/g,' ').replace(/^[\s,.-]+|[\s,.-]+$/g,'');
+
+  return { title: title || text, date: iso(d), time, category, remind, note:'' };
 }
 
 function prefill(p, raw){
