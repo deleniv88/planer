@@ -753,10 +753,15 @@ setInterval(scheduleAll, 5*60*1000);
 
 /* ---------- voice ---------- */
 const micBtn = document.getElementById('micBtn');
-let recorder = null, chunks = [], recognizer = null;
+let recorder = null, chunks = [], recognizer = null, recStarted = 0;
 
 micBtn.onclick = ()=>{
-  if(recorder && recorder.state==='recording'){ recorder.stop(); return; }
+  if(recorder && recorder.state==='recording'){
+    if(Date.now() - recStarted < 800){ toast('Говоріть довше — запис надто короткий'); return; }
+    try{ recorder.requestData(); }catch(e){}     // дозбираємо останній шматок
+    setTimeout(()=>{ try{ recorder && recorder.stop(); }catch(e){} }, 150);
+    return;
+  }
   if(recognizer){ recognizer.stop(); recognizer=null; micBtn.classList.remove('rec'); return; }
   profile.key ? startGroq() : startWebSpeech();
 };
@@ -785,17 +790,19 @@ async function startGroq(){
     const fmt = pickAudioType();
     recorder = new MediaRecorder(stream, fmt.mime ? { mimeType: fmt.mime } : undefined);
     recorder._ext = fmt.ext;
-    recorder.ondataavailable = e=>chunks.push(e.data);
+    recorder.ondataavailable = e=>{ if(e.data && e.data.size) chunks.push(e.data); };
     recorder.onstop = async ()=>{
       stream.getTracks().forEach(t=>t.stop());
       micBtn.classList.remove('rec');
       const blob = new Blob(chunks, { type: recorder.mimeType || 'audio/mp4' });
       const ext = recorder._ext || 'm4a';
       recorder = null;
-      if(blob.size < 1200){ toast('Запис порожній — потримайте кнопку довше'); return; }
+      if(blob.size < 600){ toast('Запис порожній (' + blob.size + ' Б) — говоріть довше'); return; }
       await processAudio(blob, ext);
     };
-    recorder.start();
+    // Safari на iOS не віддає дані без інтервалу — просимо шматки щопівсекунди
+    recorder.start(500);
+    recStarted = Date.now();
     micBtn.classList.add('rec');
     toast('Говоріть… натисніть ще раз, щоб зупинити');
   }catch(e){ toast('Немає доступу до мікрофона'); }
