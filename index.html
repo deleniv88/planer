@@ -753,59 +753,101 @@ setInterval(scheduleAll, 5*60*1000);
 
 /* ---------- voice ---------- */
 const micBtn = document.getElementById('micBtn');
-let recorder = null, chunks = [], recognizer = null, recStarted = 0;
+let recognizer = null, recStarted = 0;
+
+/* Запис через Web Audio: MediaRecorder на iOS віддає порожній файл,
+   тому збираємо сирі семпли самі й пакуємо у WAV — його розуміють усі. */
+let audioCtx = null, procNode = null, srcNode = null, micStream = null;
+let pcm = [], recording = false, srcRate = 44100;
 
 micBtn.onclick = ()=>{
-  if(recorder && recorder.state==='recording'){
-    if(Date.now() - recStarted < 800){ toast('Говоріть довше — запис надто короткий'); return; }
-    try{ recorder.requestData(); }catch(e){}     // дозбираємо останній шматок
-    setTimeout(()=>{ try{ recorder && recorder.stop(); }catch(e){} }, 150);
+  if(recording){
+    if(Date.now() - recStarted < 700){ toast('Говоріть довше — запис надто короткий'); return; }
+    stopRec();
     return;
   }
-  if(recognizer){ recognizer.stop(); recognizer=null; micBtn.classList.remove('rec'); return; }
-  profile.key ? startGroq() : startWebSpeech();
+  if(recognizer){ recognizer.stop(); recognizer = null; micBtn.classList.remove('rec'); return; }
+  profile.key ? startRec() : startWebSpeech();
 };
 
-/* Safari на iOS не підтримує WebM і пише в MP4. Формат Groq визначає
-   за розширенням файлу, тому беремо перший підтримуваний і даємо йому
-   відповідне імʼя, інакше запит відхиляється з 400. */
-function pickAudioType(){
-  const candidates = [
-    ['audio/webm;codecs=opus','webm'], ['audio/webm','webm'],
-    ['audio/mp4;codecs=mp4a.40.2','m4a'], ['audio/mp4','m4a'],
-    ['audio/aac','m4a'], ['audio/ogg;codecs=opus','ogg'], ['audio/mpeg','mp3']
-  ];
-  for(const [mime, ext] of candidates){
-    if(window.MediaRecorder && MediaRecorder.isTypeSupported && MediaRecorder.isTypeSupported(mime)){
-      return { mime, ext };
-    }
-  }
-  return { mime:'', ext:'m4a' };
-}
-
-async function startGroq(){
+async function startRec(){
   try{
-    const stream = await navigator.mediaDevices.getUserMedia({ audio:true });
-    chunks = [];
-    const fmt = pickAudioType();
-    recorder = new MediaRecorder(stream, fmt.mime ? { mimeType: fmt.mime } : undefined);
-    recorder._ext = fmt.ext;
-    recorder.ondataavailable = e=>{ if(e.data && e.data.size) chunks.push(e.data); };
-    recorder.onstop = async ()=>{
-      stream.getTracks().forEach(t=>t.stop());
-      micBtn.classList.remove('rec');
-      const blob = new Blob(chunks, { type: recorder.mimeType || 'audio/mp4' });
-      const ext = recorder._ext || 'm4a';
-      recorder = null;
-      if(blob.size < 600){ toast('Запис порожній (' + blob.size + ' Б) — говоріть довше'); return; }
-      await processAudio(blob, ext);
+    micStream = await navigator.mediaDevices.getUserMedia({
+      audio:{ channelCount:1, echoCancellation:true, noiseSuppression:true }
+    });
+    const AC = window.AudioContext || window.webkitAudioContext;
+    audioCtx = new AC();
+    if(audioCtx.state === 'suspended') await audioCtx.resume();
+    srcRate = audioCtx.sampleRate;
+
+    srcNode  = audioCtx.createMediaStreamSource(micStream);
+    procNode = audioCtx.createScriptProcessor(4096, 1, 1);
+    pcm = [];
+    procNode.onaudioprocess = e=>{
+      if(recording) pcm.push(new Float32Array(e.inputBuffer.getChannelData(0)));
     };
-    // Safari на iOS не віддає дані без інтервалу — просимо шматки щопівсекунди
-    recorder.start(500);
-    recStarted = Date.now();
+    // глушник: вузол має бути підключений до виходу, але чути себе не треба
+    const mute = audioCtx.createGain();
+    mute.gain.value = 0;
+    srcNode.connect(procNode); procNode.connect(mute); mute.connect(audioCtx.destination);
+
+    recording = true; recStarted = Date.now();
     micBtn.classList.add('rec');
     toast('Говоріть… натисніть ще раз, щоб зупинити');
-  }catch(e){ toast('Немає доступу до мікрофона'); }
+  }catch(e){
+    console.error('mic:', e);
+    toast('Немає доступу до мікрофона');
+    cleanupRec();
+  }
+}
+
+async function stopRec(){
+  recording = false;
+  micBtn.classList.remove('rec');
+  const rate = srcRate, data = pcm;
+  pcm = [];
+  await cleanupRec();
+  const blob = encodeWav(data, rate, 16000);
+  if(blob.size < 4000){ toast('Запис порожній (' + blob.size + ' Б) — говоріть довше'); return; }
+  await processAudio(blob, 'wav');
+}
+
+async function cleanupRec(){
+  try{ procNode && procNode.disconnect(); }catch(e){}
+  try{ srcNode  && srcNode.disconnect();  }catch(e){}
+  try{ micStream && micStream.getTracks().forEach(t=>t.stop()); }catch(e){}
+  try{ audioCtx && audioCtx.state !== 'closed' && await audioCtx.close(); }catch(e){}
+  procNode = srcNode = micStream = audioCtx = null;
+}
+
+/* Float32 → 16 kHz mono 16-bit WAV */
+function encodeWav(chunks, inRate, outRate){
+  let len = 0; chunks.forEach(c=>len += c.length);
+  const flat = new Float32Array(len);
+  let off = 0; chunks.forEach(c=>{ flat.set(c, off); off += c.length; });
+
+  const ratio = inRate / outRate;
+  const outLen = Math.floor(flat.length / ratio);
+  const out = new Int16Array(outLen);
+  for(let i = 0; i < outLen; i++){
+    // усереднюємо вікно замість простої вибірки — менше пилки
+    const start = Math.floor(i * ratio), end = Math.min(Math.floor((i+1) * ratio), flat.length);
+    let sum = 0, n = 0;
+    for(let j = start; j < end; j++){ sum += flat[j]; n++; }
+    const v = n ? sum / n : 0;
+    out[i] = Math.max(-1, Math.min(1, v)) * 0x7FFF;
+  }
+
+  const buf = new ArrayBuffer(44 + out.length * 2);
+  const dv = new DataView(buf);
+  const str = (o, t)=>{ for(let i = 0; i < t.length; i++) dv.setUint8(o + i, t.charCodeAt(i)); };
+  str(0,'RIFF'); dv.setUint32(4, 36 + out.length * 2, true); str(8,'WAVE');
+  str(12,'fmt '); dv.setUint32(16, 16, true); dv.setUint16(20, 1, true); dv.setUint16(22, 1, true);
+  dv.setUint32(24, outRate, true); dv.setUint32(28, outRate * 2, true);
+  dv.setUint16(32, 2, true); dv.setUint16(34, 16, true);
+  str(36,'data'); dv.setUint32(40, out.length * 2, true);
+  new Int16Array(buf, 44).set(out);
+  return new Blob([buf], { type:'audio/wav' });
 }
 
 async function processAudio(blob, ext='m4a'){
